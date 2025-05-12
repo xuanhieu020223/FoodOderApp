@@ -5,13 +5,13 @@ import { getFirestore } from 'firebase/firestore';
 
 // Cấu hình Firebase 
 const firebaseConfig = {
-  apiKey: 'AIzaSyDENpoUZ7bvbYUw58QVOk0F6d2ZTYARXEw',
-  authDomain: 'myfoodapp-412bd.firebaseapp.com',
-  projectId: 'myfoodapp-412bd',
-  storageBucket: 'myfoodapp-412bd.appspot.com',
-  messagingSenderId: '1065217426765',
-  appId: '1:1065217426765:web:6bf3f4511ef23aa6bd2304',
-  measurementId: 'G-SSTPZP1D6P', 
+  apiKey: "AIzaSyCzMpCWZDpy62MSCgHGHxHMHIJZZOsyEyY",
+  authDomain: "myfooddoor.firebaseapp.com",
+  projectId: "myfooddoor",
+  storageBucket: "myfooddoor.firebasestorage.app",
+  messagingSenderId: "650981005430",
+  appId: "1:650981005430:web:4db8e1ba373e002c862757",
+  measurementId: "G-5J0LXT65PZ"
 };
 
 // Khởi tạo app
