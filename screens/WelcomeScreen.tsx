@@ -1,9 +1,15 @@
-import React, { useRef } from 'react';
-import { View, Text, StyleSheet, StatusBar, TouchableOpacity, Image, Animated, Dimensions } from 'react-native';
+import React from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  SafeAreaView,
+  Dimensions,
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import * as Animatable from 'react-native-animatable';
-
 
 type RootStackParamList = {
   Welcome: undefined;
@@ -12,123 +18,144 @@ type RootStackParamList = {
   Home: undefined;
 };
 
-type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'Welcome'>;
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-const Colors = {
-  DEFAULT_WHITE: '#FFFFFF',
-  DEFAULT_GREEN: '#34A853',
-  DEFAULT_GREY: '#666666',
-};
-
-const Fonts = {
-  POPPINS_MEDIUM: 'Poppins-Medium',
-};
-
-const Display = {
-  setWidth: (percent: number) => (Dimensions.get('window').width * percent) / 100,
-  setHeight: (percent: number) => (Dimensions.get('window').height * percent) / 100,
-};
+const { width } = Dimensions.get('window');
 
 const WelcomeScreen = () => {
   const navigation = useNavigation<NavigationProp>();
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-
-  const handlePressIn = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 0.95,
-      friction: 3,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const handlePressOut = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      friction: 3,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const navigateToLogIn = () => {
-    navigation.navigate('Login'); 
-  };
 
   return (
-    <View style={styles.container}>
-      <StatusBar
-        barStyle="dark-content"
-        backgroundColor={Colors.DEFAULT_WHITE}
-        translucent
-      />
+    <SafeAreaView style={styles.container}>
+      <View style={styles.content}>
+        <View style={styles.logoContainer}>
+          <Image
+            source={require('../assets/images/logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+          <Text style={styles.appName}>Food Order</Text>
+          <Text style={styles.slogan}>Đặt đồ ăn ngon, giao hàng nhanh</Text>
+        </View>
 
-      <Animatable.View
-        animation="fadeInDown"
-        duration={1000}
-        style={styles.welcomeContainer}
-      >
-        <Text style={styles.title}> Bắt đầu ngay!</Text>
-        <Text style={styles.description}>
-          Sẵn sàng khám phá thế giới ẩm thực cùng chúng tôi?
-        </Text>
+       
 
-        <Animatable.View animation="pulse" iterationCount="infinite">
+        <View style={styles.buttonContainer}>
           <TouchableOpacity
-            style={styles.gettingStartedButton}
-            activeOpacity={0.8}
-            onPress={navigateToLogIn}
+            style={styles.loginButton}
+            onPress={() => navigation.navigate('Login')}
           >
-            <Text style={styles.gettingStartedButtonText}>Bắt đầu</Text>
+            <Text style={styles.loginButtonText}>Đăng nhập</Text>
           </TouchableOpacity>
-        </Animatable.View>
-      </Animatable.View>
-    </View>
+
+          <TouchableOpacity
+            style={styles.registerButton}
+            onPress={() => navigation.navigate('Register')}
+          >
+            <Text style={styles.registerButtonText}>Đăng ký</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>
+            Bằng việc tiếp tục, bạn đồng ý với
+          </Text>
+          <View style={styles.termsContainer}>
+            <TouchableOpacity>
+              <Text style={styles.termsText}>Điều khoản dịch vụ</Text>
+            </TouchableOpacity>
+            <Text style={styles.footerText}> và </Text>
+            <TouchableOpacity>
+              <Text style={styles.termsText}>Chính sách bảo mật</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.DEFAULT_WHITE,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#fff',
   },
-  welcomeContainer: {
-    width: '85%',
-    alignItems: 'center',
+  content: {
+    flex: 1,
     padding: 20,
-    backgroundColor: '#F0F8FF',
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 8,
+    justifyContent: 'space-between',
   },
-  title: {
+  logoContainer: {
+    alignItems: 'center',
+    marginTop: 40,
+  },
+  logo: {
+    width: 120,
+    height: 120,
+    marginBottom: 16,
+  },
+  appName: {
     fontSize: 28,
     fontWeight: 'bold',
-    marginBottom: 12,
-    color: Colors.DEFAULT_GREEN,
-    textAlign: 'center',
+    color: '#ee4d2d',
+    marginBottom: 8,
   },
-  description: {
+  slogan: {
     fontSize: 16,
-    color: Colors.DEFAULT_GREY,
+    color: '#666',
     textAlign: 'center',
-    marginBottom: 24,
   },
-  gettingStartedButton: {
-    backgroundColor: Colors.DEFAULT_GREEN,
-    paddingVertical: 14,
-    paddingHorizontal: 50,
-    borderRadius: 30,
-    justifyContent: 'center',
+  welcomeImage: {
+    width: width - 40,
+    height: width - 40,
+    alignSelf: 'center',
+  },
+  buttonContainer: {
+    marginBottom: 20,
+  },
+  loginButton: {
+    backgroundColor: '#ee4d2d',
+    paddingVertical: 16,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  loginButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  registerButton: {
+    backgroundColor: '#fff',
+    paddingVertical: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ee4d2d',
+  },
+  registerButtonText: {
+    color: '#ee4d2d',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  footer: {
     alignItems: 'center',
+    marginBottom: 20,
   },
-  gettingStartedButtonText: {
-    fontSize: 18,
-    color: Colors.DEFAULT_WHITE,
-    fontFamily: Fonts.POPPINS_MEDIUM,
+  footerText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+  },
+  termsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  termsText: {
+    fontSize: 14,
+    color: '#ee4d2d',
   },
 });
 

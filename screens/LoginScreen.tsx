@@ -97,6 +97,8 @@ const LogIn = () => {
             resizeMode="contain"
           />
         </View>
+        
+        <Text style={styles.titleText}>Đăng Nhập</Text>
 
         <View style={styles.formContainer}>
         
@@ -153,6 +155,7 @@ const LogIn = () => {
               </Text>
             </Text>
           </View>
+
         </View>
       </Animated.View>
     </KeyboardAvoidingView>
@@ -180,6 +183,14 @@ const styles = StyleSheet.create({
   formContainer: {
     flex: 1,
   },
+  titleText: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 32,
+    textAlign: 'center',
+  },
+  
   welcomeText: {
     fontSize: 24,
     fontWeight: 'bold',
@@ -277,3 +288,4 @@ const styles = StyleSheet.create({
 });
 
 export default LogIn;
+
