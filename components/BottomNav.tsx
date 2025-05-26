@@ -1,28 +1,26 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 type RootStackParamList = {
-  Welcome: undefined;
-  Login: undefined;
-  Register: undefined;
   Home: undefined;
-  OrdersScreen: undefined;
-  FavoritesScreen: undefined;
-  NotificationsScreen: undefined;
-  ProfileScreen: undefined;
+  Orders: undefined;
+  Favorites: undefined;
+  Notifications: undefined;
+  Profile: undefined;
 };
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 const BottomNav = () => {
   const navigation = useNavigation<NavigationProp>();
-  const currentRoute = navigation.getState().routes[navigation.getState().index].name;
+  const route = useRoute();
+  const currentRoute = route.name;
 
   return (
-    <View style={styles.bottomNav}>
+    <View style={styles.container}>
       <TouchableOpacity 
         style={styles.navItem}
         onPress={() => navigation.navigate('Home')}
@@ -38,53 +36,53 @@ const BottomNav = () => {
       </TouchableOpacity>
       <TouchableOpacity 
         style={styles.navItem}
-        onPress={() => navigation.navigate('OrdersScreen')}
+        onPress={() => navigation.navigate('Orders')}
       >
         <Ionicons 
-          name={currentRoute === 'OrdersScreen' ? 'receipt' : 'receipt-outline'} 
+          name={currentRoute === 'Orders' ? 'receipt' : 'receipt-outline'} 
           size={24} 
-          color={currentRoute === 'OrdersScreen' ? '#ee4d2d' : '#666'} 
+          color={currentRoute === 'Orders' ? '#ee4d2d' : '#666'} 
         />
-        <Text style={[styles.navText, currentRoute === 'OrdersScreen' && styles.activeNavText]}>
+        <Text style={[styles.navText, currentRoute === 'Orders' && styles.activeNavText]}>
           Đơn hàng
         </Text>
       </TouchableOpacity>
       <TouchableOpacity 
         style={styles.navItem}
-        onPress={() => navigation.navigate('FavoritesScreen')}
+        onPress={() => navigation.navigate('Favorites')}
       >
         <Ionicons 
-          name={currentRoute === 'FavoritesScreen' ? 'heart' : 'heart-outline'} 
+          name={currentRoute === 'Favorites' ? 'heart' : 'heart-outline'} 
           size={24} 
-          color={currentRoute === 'FavoritesScreen' ? '#ee4d2d' : '#666'} 
+          color={currentRoute === 'Favorites' ? '#ee4d2d' : '#666'} 
         />
-        <Text style={[styles.navText, currentRoute === 'FavoritesScreen' && styles.activeNavText]}>
-          Thích
+        <Text style={[styles.navText, currentRoute === 'Favorites' && styles.activeNavText]}>
+          Yêu thích
         </Text>
       </TouchableOpacity>
       <TouchableOpacity 
         style={styles.navItem}
-        onPress={() => navigation.navigate('NotificationsScreen')}
+        onPress={() => navigation.navigate('Notifications')}
       >
         <Ionicons 
-          name={currentRoute === 'NotificationsScreen' ? 'notifications' : 'notifications-outline'} 
+          name={currentRoute === 'Notifications' ? 'notifications' : 'notifications-outline'} 
           size={24} 
-          color={currentRoute === 'NotificationsScreen' ? '#ee4d2d' : '#666'} 
+          color={currentRoute === 'Notifications' ? '#ee4d2d' : '#666'} 
         />
-        <Text style={[styles.navText, currentRoute === 'NotificationsScreen' && styles.activeNavText]}>
+        <Text style={[styles.navText, currentRoute === 'Notifications' && styles.activeNavText]}>
           Thông báo
         </Text>
       </TouchableOpacity>
       <TouchableOpacity 
         style={styles.navItem}
-        onPress={() => navigation.navigate('ProfileScreen')}
+        onPress={() => navigation.navigate('Profile')}
       >
         <Ionicons 
-          name={currentRoute === 'ProfileScreen' ? 'person' : 'person-outline'} 
+          name={currentRoute === 'Profile' ? 'person' : 'person-outline'} 
           size={24} 
-          color={currentRoute === 'ProfileScreen' ? '#ee4d2d' : '#666'} 
+          color={currentRoute === 'Profile' ? '#ee4d2d' : '#666'} 
         />
-        <Text style={[styles.navText, currentRoute === 'ProfileScreen' && styles.activeNavText]}>
+        <Text style={[styles.navText, currentRoute === 'Profile' && styles.activeNavText]}>
           Tôi
         </Text>
       </TouchableOpacity>
@@ -93,17 +91,17 @@ const BottomNav = () => {
 };
 
 const styles = StyleSheet.create({
-  bottomNav: {
+  container: {
     flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingVertical: 10,
     borderTopWidth: 1,
     borderTopColor: '#eee',
-    paddingVertical: 8,
-    backgroundColor: '#fff',
   },
   navItem: {
-    flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
   },
   navText: {
     fontSize: 12,

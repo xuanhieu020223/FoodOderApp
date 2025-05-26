@@ -18,59 +18,56 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { CommonActions } from '@react-navigation/native';
 import { auth, db } from '../config/Firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-
-// Định nghĩa type cho Navigation tương ứng với app/index.tsx
-type RootStackParamList = {
-  Welcome: undefined;
-  Login: undefined;
-  Register: undefined;
-  Home: undefined;
-};
+import { collection, query, where, getDocs, getDoc, doc } from 'firebase/firestore';
+import { RootStackParamList } from '../app';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 const LogIn = () => {
   const navigation = useNavigation<NavigationProp>();
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [secureText, setSecureText] = useState(true);
 
   const handleLogin = async () => {
-    if (!username.trim() || !password.trim()) {
-      Alert.alert('Thông báo', 'Vui lòng nhập tên đăng nhập và mật khẩu.');
+    if (!email.trim() || !password.trim()) {
+      Alert.alert('Thông báo', 'Vui lòng nhập email và mật khẩu.');
       return;
     }
 
     try {
-      const usersRef = collection(db, 'users');
-      const q = query(usersRef, where('username', '==', username.trim()));
-      const querySnapshot = await getDocs(q);
-
-      if (querySnapshot.empty) {
-        Alert.alert('Lỗi', 'Tên đăng nhập không tồn tại.');
+      const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+      
+      if (!userDoc.exists()) {
+        Alert.alert('Lỗi', 'Không tìm thấy thông tin người dùng');
         return;
       }
 
-      const userDoc = querySnapshot.docs[0].data();
-      const email = userDoc.email;
+      const userData = userDoc.data();
+      
+      // Kiểm tra role và điều hướng
+      if (userData.role === 'admin') {
+        navigation.dispatch(
+          CommonActions.reset({
+            index: 0,
+            routes: [{ name: 'AdminApp' }],
+          })
+        );
+      } else {
+        navigation.dispatch(
+          CommonActions.reset({
+            index: 0,
+            routes: [{ name: 'UserApp' }],
+          })
+        );
+      }
 
-      await signInWithEmailAndPassword(auth, email, password);
-      Alert.alert('Thành công', 'Đăng nhập thành công!', [
-        {
-          text: 'OK',
-          onPress: () => {
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'Home' }],
-            });
-          }
-        }
-      ]);
+      Alert.alert('Thành công', 'Đăng nhập thành công!');
     } catch (error: any) {
       console.error('Login error:', error);
       if (error.code === 'auth/invalid-credential') {
-        Alert.alert('Đăng nhập thất bại', 'Mật khẩu không đúng.');
+        Alert.alert('Đăng nhập thất bại', 'Email hoặc mật khẩu không đúng.');
       } else if (error.code === 'auth/user-not-found') {
         Alert.alert('Đăng nhập thất bại', 'Tài khoản không tồn tại.');
       } else {
@@ -101,14 +98,14 @@ const LogIn = () => {
         <Text style={styles.titleText}>Đăng Nhập</Text>
 
         <View style={styles.formContainer}>
-        
           <View style={styles.inputContainer}>
             <TextInput
-              placeholder="Tên đăng nhập"
+              placeholder="Email"
               style={styles.textInput}
-              value={username}
-              onChangeText={setUsername}
+              value={email}
+              onChangeText={setEmail}
               autoCapitalize="none"
+              keyboardType="email-address"
             />
           </View>
 
@@ -125,7 +122,10 @@ const LogIn = () => {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.forgot}>
+          <TouchableOpacity 
+            style={styles.forgot}
+            onPress={() => navigation.navigate('ResetPassword')}
+          >
             <Text style={styles.forgotText}>Quên mật khẩu?</Text>
           </TouchableOpacity>
 
@@ -149,13 +149,12 @@ const LogIn = () => {
               Chưa có tài khoản?{' '}
               <Text
                 style={styles.registerLink}
-                onPress={() => navigation.navigate('Register' as never)}
+                onPress={() => navigation.navigate('Register')}
               >
                 Đăng ký
               </Text>
             </Text>
           </View>
-
         </View>
       </Animated.View>
     </KeyboardAvoidingView>

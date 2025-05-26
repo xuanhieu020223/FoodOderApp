@@ -1,25 +1,39 @@
+import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-// Import các màn hình
+import type { NavigatorScreenParams } from '@react-navigation/native';
+
+// Import screens
 import WelcomeScreen from '../screens/WelcomeScreen';
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
-import HomeScreen from '../screens/HomeScreen';
-import OrdersScreen from '../screens/OrdersScreen';
-import FavoritesScreen from '../screens/FavoritesScreen';
-import NotificationsScreen from '../screens/NotificationsScreen';
-import ProfileScreen from '../screens/ProfileScreen';
+import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 
-const Stack = createNativeStackNavigator();
+// Import navigators
+import UserNavigator from '../navigation/UserNavigator';
+import AdminNavigator, { AdminTabParamList } from '../navigation/AdminNavigator';
+
+// Define navigation types
+export type RootStackParamList = {
+  Welcome: undefined;
+  Login: { isAdmin?: boolean };
+  Register: undefined;
+  ResetPassword: undefined;
+  UserApp: undefined;
+  AdminApp: NavigatorScreenParams<AdminTabParamList>;
+};
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const AppNavigator = () => {
   return (
     <Stack.Navigator
       initialRouteName="Welcome"
       screenOptions={{
-        headerStyle: { backgroundColor: '#FF6B6B' },
-        headerTintColor: 'white',
+        headerStyle: { backgroundColor: '#ee4d2d' },
+        headerTintColor: '#fff',
       }}
     >
+      {/* Auth screens */}
       <Stack.Screen
         name="Welcome"
         component={WelcomeScreen}
@@ -36,28 +50,20 @@ const AppNavigator = () => {
         options={{ headerShown: false }}
       />
       <Stack.Screen
-        name="Home"
-        component={HomeScreen}
-        options={{ headerShown: false, headerLeft: () => null }}
+        name="ResetPassword"
+        component={ResetPasswordScreen}
+        options={{ title: 'Đặt lại mật khẩu' }}
       />
+
+      {/* App navigators */}
       <Stack.Screen
-        name="OrdersScreen"
-        component={OrdersScreen}
+        name="UserApp"
+        component={UserNavigator}
         options={{ headerShown: false }}
       />
       <Stack.Screen
-        name="FavoritesScreen"
-        component={FavoritesScreen}
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="NotificationsScreen"
-        component={NotificationsScreen}
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen
-        name="ProfileScreen"
-        component={ProfileScreen}
+        name="AdminApp"
+        component={AdminNavigator}
         options={{ headerShown: false }}
       />
     </Stack.Navigator>

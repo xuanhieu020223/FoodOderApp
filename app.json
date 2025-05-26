@@ -9,13 +9,18 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Ứng dụng cần quyền truy cập camera để chụp ảnh sản phẩm",
+        "NSPhotoLibraryUsageDescription": "Ứng dụng cần quyền truy cập thư viện ảnh để chọn ảnh sản phẩm"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "permissions": ["CAMERA", "READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE"]
     },
     "web": {
       "bundler": "metro",
@@ -23,7 +28,9 @@
       "favicon": "./assets/images/IconWeb.png"
     },
     "plugins": [
-      
+      ["expo-camera", {
+        "cameraPermission": "Ứng dụng cần quyền truy cập camera để chụp ảnh sản phẩm"
+      }],
       [
         "expo-splash-screen",
         {
@@ -37,6 +44,5 @@
     "experiments": {
       "typedRoutes": true
     }
-   
   }
 }
