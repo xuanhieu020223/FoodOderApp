@@ -14,12 +14,12 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { doc, getDoc, collection, addDoc, query, where, getDocs, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, addDoc, query, where, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../../config/Firebase';
 import { UserStackParamList } from '../../navigation/UserNavigator';
 
-type FoodDetailRouteProp = RouteProp<UserStackParamList, 'FoodDetail'>;
 type NavigationProp = NativeStackNavigationProp<UserStackParamList>;
+type FoodDetailRouteProp = RouteProp<UserStackParamList, 'FoodDetail'>;
 
 type Food = {
   id: string;
@@ -52,9 +52,12 @@ const FoodDetailScreen = () => {
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(true);
   const [addingToCart, setAddingToCart] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [favoriteId, setFavoriteId] = useState<string | null>(null);
 
   useEffect(() => {
     loadFoodDetails();
+    checkFavoriteStatus();
   }, [foodId]);
 
   const loadFoodDetails = async () => {
@@ -68,6 +71,76 @@ const FoodDetailScreen = () => {
       console.error('Error loading food details:', error);
       Alert.alert('Lỗi', 'Không thể tải thông tin món ăn');
       setLoading(false);
+    }
+  };
+
+  const checkFavoriteStatus = async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+
+      const favoritesRef = collection(db, 'favorites');
+      const q = query(
+        favoritesRef,
+        where('userId', '==', user.uid),
+        where('foodId', '==', foodId)
+      );
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        setIsFavorite(true);
+        setFavoriteId(querySnapshot.docs[0].id);
+      } else {
+        setIsFavorite(false);
+        setFavoriteId(null);
+      }
+    } catch (error) {
+      console.error('Error checking favorite status:', error);
+    }
+  };
+
+  const toggleFavorite = async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        Alert.alert(
+          'Thông báo',
+          'Vui lòng đăng nhập để thêm vào yêu thích',
+          [
+            {
+              text: 'Hủy',
+              style: 'cancel',
+            },
+            {
+              text: 'Đăng nhập',
+              onPress: () => navigation.navigate('Login'),
+            },
+          ]
+        );
+        return;
+      }
+
+      if (isFavorite && favoriteId) {
+        // Remove from favorites
+        await deleteDoc(doc(db, 'favorites', favoriteId));
+        setIsFavorite(false);
+        setFavoriteId(null);
+        Alert.alert('Thành công', 'Đã xóa khỏi danh sách yêu thích');
+      } else {
+        // Add to favorites
+        const favoritesRef = collection(db, 'favorites');
+        const favoriteDoc = await addDoc(favoritesRef, {
+          userId: user.uid,
+          foodId: foodId,
+          createdAt: new Date(),
+        });
+        setIsFavorite(true);
+        setFavoriteId(favoriteDoc.id);
+        Alert.alert('Thành công', 'Đã thêm vào danh sách yêu thích');
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+      Alert.alert('Lỗi', 'Không thể thực hiện thao tác');
     }
   };
 
@@ -201,7 +274,7 @@ const FoodDetailScreen = () => {
       }
 
       // Add to cart first
-      const cartRef = collection(db, 'carts');
+      const cartsRef = collection(db, 'carts');
       const cartItem: CartItem = {
         foodId: food.id,
         quantity: quantity,
@@ -212,13 +285,15 @@ const FoodDetailScreen = () => {
         createdAt: new Date(),
       };
 
-      await addDoc(cartRef, cartItem);
+      const cartDocRef = await addDoc(cartsRef, cartItem);
 
-      // Navigate to checkout
-      navigation.navigate('Cart');
+      // Navigate to checkout with the cart item id
+      navigation.navigate('Checkout', {
+        selectedItems: [cartDocRef.id],
+      });
     } catch (error) {
-      console.error('Error processing order:', error);
-      Alert.alert('Lỗi', 'Không thể xử lý đơn hàng');
+      console.error('Error processing buy now:', error);
+      Alert.alert('Lỗi', 'Không thể xử lý yêu cầu mua hàng');
     } finally {
       setAddingToCart(false);
     }
@@ -243,14 +318,19 @@ const FoodDetailScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView>
-        <Image source={{ uri: food.imageUrl }} style={styles.foodImage} />
-        
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
+        <View style={styles.imageContainer}>
+          <Image source={{ uri: food.imageUrl }} style={styles.foodImage} />
+          <TouchableOpacity 
+            style={styles.favoriteButton}
+            onPress={toggleFavorite}
+          >
+            <Ionicons 
+              name={isFavorite ? "heart" : "heart-outline"} 
+              size={24} 
+              color={isFavorite ? "#ee4d2d" : "#fff"} 
+            />
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.contentContainer}>
           <Text style={styles.foodName}>{food.name}</Text>
@@ -342,17 +422,6 @@ const styles = StyleSheet.create({
     width: width,
     height: width * 0.8,
     resizeMode: 'cover',
-  },
-  backButton: {
-    position: 'absolute',
-    top: 40,
-    left: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   contentContainer: {
     padding: 16,
@@ -459,6 +528,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#fff',
     fontWeight: '600',
+  },
+  imageContainer: {
+    position: 'relative',
+  },
+  favoriteButton: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

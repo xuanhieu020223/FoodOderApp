@@ -34,6 +34,7 @@ const CartScreen = () => {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
 
   useEffect(() => {
     loadCartItems();
@@ -118,21 +119,52 @@ const CartScreen = () => {
     }
   };
 
-  const calculateTotal = () => {
-    return cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const handleSelectItem = (itemId: string) => {
+    setSelectedItems(prev => {
+      if (prev.includes(itemId)) {
+        return prev.filter(id => id !== itemId);
+      } else {
+        return [...prev, itemId];
+      }
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedItems.length === cartItems.length) {
+      setSelectedItems([]);
+    } else {
+      setSelectedItems(cartItems.map(item => item.id));
+    }
+  };
+
+  const calculateSelectedTotal = () => {
+    return cartItems
+      .filter(item => selectedItems.includes(item.id))
+      .reduce((sum, item) => sum + (item.price * item.quantity), 0);
   };
 
   const handleCheckout = () => {
-    if (cartItems.length === 0) {
-      Alert.alert('Thông báo', 'Giỏ hàng trống');
+    if (selectedItems.length === 0) {
+      Alert.alert('Thông báo', 'Vui lòng chọn ít nhất một món để thanh toán');
       return;
     }
-    // Navigate to checkout screen
-    // navigation.navigate('Checkout');
+    navigation.navigate('Checkout', { selectedItems });
   };
 
   const renderItem = ({ item }: { item: CartItem }) => (
     <View style={styles.cartItem}>
+      <TouchableOpacity
+        style={[
+          styles.checkbox,
+          selectedItems.includes(item.id) && styles.checkboxSelected
+        ]}
+        onPress={() => handleSelectItem(item.id)}
+      >
+        {selectedItems.includes(item.id) && (
+          <Ionicons name="checkmark" size={16} color="#fff" />
+        )}
+      </TouchableOpacity>
+
       <Image source={{ uri: item.imageUrl }} style={styles.itemImage} />
       
       <View style={styles.itemInfo}>
@@ -203,7 +235,7 @@ const CartScreen = () => {
         <Text style={styles.emptyText}>Giỏ hàng trống</Text>
         <TouchableOpacity
           style={styles.continueButton}
-          onPress={() => navigation.navigate('TabNavigator')}
+          onPress={() => navigation.navigate('TabNavigator', { screen: 'Home' })}
         >
           <Text style={styles.continueButtonText}>Tiếp tục mua sắm</Text>
         </TouchableOpacity>
@@ -213,6 +245,23 @@ const CartScreen = () => {
 
   return (
     <View style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.selectAllContainer}
+          onPress={handleSelectAll}
+        >
+          <View style={[
+            styles.checkbox,
+            selectedItems.length === cartItems.length && styles.checkboxSelected
+          ]}>
+            {selectedItems.length === cartItems.length && (
+              <Ionicons name="checkmark" size={16} color="#fff" />
+            )}
+          </View>
+          <Text style={styles.selectAllText}>Chọn tất cả</Text>
+        </TouchableOpacity>
+      </View>
+
       <FlatList
         data={cartItems}
         renderItem={renderItem}
@@ -222,9 +271,9 @@ const CartScreen = () => {
       
       <View style={styles.footer}>
         <View style={styles.totalContainer}>
-          <Text style={styles.totalLabel}>Tổng tiền:</Text>
+          <Text style={styles.totalLabel}>Tổng tiền ({selectedItems.length} món):</Text>
           <Text style={styles.totalPrice}>
-            {calculateTotal().toLocaleString('vi-VN', {
+            {calculateSelectedTotal().toLocaleString('vi-VN', {
               style: 'currency',
               currency: 'VND'
             })}
@@ -232,10 +281,16 @@ const CartScreen = () => {
         </View>
         
         <TouchableOpacity 
-          style={styles.checkoutButton}
+          style={[
+            styles.checkoutButton,
+            selectedItems.length === 0 && styles.checkoutButtonDisabled
+          ]}
           onPress={handleCheckout}
+          disabled={selectedItems.length === 0}
         >
-          <Text style={styles.checkoutButtonText}>Thanh toán</Text>
+          <Text style={styles.checkoutButtonText}>
+            Thanh toán ({selectedItems.length})
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -372,6 +427,36 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#fff',
     fontWeight: '600',
+  },
+  header: {
+    backgroundColor: '#fff',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  selectAllContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#ee4d2d',
+    marginRight: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxSelected: {
+    backgroundColor: '#ee4d2d',
+  },
+  selectAllText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  checkoutButtonDisabled: {
+    backgroundColor: '#ccc',
   },
 });
 

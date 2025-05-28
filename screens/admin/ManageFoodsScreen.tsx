@@ -58,6 +58,54 @@ interface FoodFormModalProps {
   loading?: boolean;
 }
 
+const ImagePickerModal = memo(({ visible, onClose, onSelectOption }: {
+  visible: boolean;
+  onClose: () => void;
+  onSelectOption: (option: 'camera' | 'library') => void;
+}) => {
+  return (
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View style={styles.imagePickerModalOverlay}>
+          <TouchableWithoutFeedback>
+            <View style={styles.imagePickerModalContent}>
+              <Text style={styles.imagePickerModalTitle}>Chọn ảnh từ</Text>
+              
+              <TouchableOpacity 
+                style={styles.imagePickerOption}
+                onPress={() => onSelectOption('camera')}
+              >
+                <MaterialIcons name="camera-alt" size={24} color="#333" />
+                <Text style={styles.imagePickerOptionText}>Máy ảnh</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.imagePickerOption}
+                onPress={() => onSelectOption('library')}
+              >
+                <MaterialIcons name="photo-library" size={24} color="#333" />
+                <Text style={styles.imagePickerOptionText}>Thư viện ảnh</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.imagePickerCancelButton}
+                onPress={onClose}
+              >
+                <Text style={styles.imagePickerCancelText}>Hủy</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+  );
+});
+
 const FoodFormModal = memo(({ 
   visible, 
   onClose, 
@@ -73,6 +121,7 @@ const FoodFormModal = memo(({
     category: '',
     selectedImage: null
   });
+  const [imagePickerVisible, setImagePickerVisible] = useState(false);
 
   useEffect(() => {
     if (editingFood) {
@@ -101,19 +150,51 @@ const FoodFormModal = memo(({
     }));
   }, []);
 
-  const handlePickImage = useCallback(async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 1,
-    });
+  const handleImagePick = useCallback(async (option: 'camera' | 'library') => {
+    try {
+      let result;
+      
+      if (option === 'camera') {
+        // Request camera permission
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Lỗi', 'Cần cấp quyền truy cập máy ảnh để chụp ảnh');
+          return;
+        }
+        
+        result = await ImagePicker.launchCameraAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [4, 3],
+          quality: 1,
+        });
+      } else {
+        // Request media library permission
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Lỗi', 'Cần cấp quyền truy cập thư viện ảnh để chọn ảnh');
+          return;
+        }
+        
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ImagePicker.MediaTypeOptions.Images,
+          allowsEditing: true,
+          aspect: [4, 3],
+          quality: 1,
+        });
+      }
 
-    if (!result.canceled) {
-      setFormData(prev => ({
-        ...prev,
-        selectedImage: result.assets[0].uri
-      }));
+      if (!result.canceled) {
+        setFormData(prev => ({
+          ...prev,
+          selectedImage: result.assets[0].uri
+        }));
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Lỗi', 'Không thể chọn ảnh. Vui lòng thử lại');
+    } finally {
+      setImagePickerVisible(false);
     }
   }, []);
 
@@ -151,7 +232,10 @@ const FoodFormModal = memo(({
                 {editingFood ? 'Chỉnh sửa món ăn' : 'Thêm món ăn mới'}
               </Text>
 
-              <TouchableOpacity style={styles.imagePicker} onPress={handlePickImage}>
+              <TouchableOpacity 
+                style={styles.imagePicker} 
+                onPress={() => setImagePickerVisible(true)}
+              >
                 {formData.selectedImage ? (
                   <Image source={{ uri: formData.selectedImage }} style={styles.previewImage} />
                 ) : editingFood?.imageUrl ? (
@@ -243,6 +327,12 @@ const FoodFormModal = memo(({
           </View>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
+
+      <ImagePickerModal
+        visible={imagePickerVisible}
+        onClose={() => setImagePickerVisible(false)}
+        onSelectOption={handleImagePick}
+      />
     </Modal>
   );
 });
@@ -255,7 +345,7 @@ const ManageFoodsScreen = () => {
   const [editingFood, setEditingFood] = useState<Food | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [filteredFoods, setFilteredFoods] = useState<Food[]>([]);
 
   // Form states
   const [name, setName] = useState('');
@@ -267,6 +357,20 @@ const ManageFoodsScreen = () => {
     loadFoods();
     loadCategories();
   }, []);
+
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setFilteredFoods(foods);
+    } else {
+      const query = searchQuery.toLowerCase().trim();
+      const filtered = foods.filter(food => 
+        food.name.toLowerCase().includes(query) ||
+        food.description.toLowerCase().includes(query) ||
+        food.category.toLowerCase().includes(query)
+      );
+      setFilteredFoods(filtered);
+    }
+  }, [searchQuery, foods]);
 
   const loadFoods = async () => {
     try {
@@ -534,24 +638,65 @@ const ManageFoodsScreen = () => {
 
   return (
     <View style={styles.container}>
-      <FlatList
-        data={foods}
-        renderItem={renderFoodItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContainer}
-      />
+      <View style={styles.header}>
+       {/* <Text style={styles.headerTitle}>Quản lý món ăn</Text> */}
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={() => {
+            setEditingFood(null);
+            setModalVisible(true);
+          }}
+        >
+          <MaterialIcons name="add" size={24} color="#fff" />
+          <Text style={styles.addButtonText}>Thêm món</Text>
+        </TouchableOpacity>
+      </View>
 
-      <TouchableOpacity 
-        style={styles.fab}
-        onPress={() => {
-          setEditingFood(null);
-          setModalVisible(true);
-        }}
-      >
-        <MaterialIcons name="add" size={24} color="#fff" />
-      </TouchableOpacity>
+      <View style={styles.searchContainer}>
+        <View style={styles.searchInputContainer}>
+          <MaterialIcons name="search" size={24} color="#666" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Tìm kiếm món ăn..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setSearchQuery('')}
+              style={styles.clearButton}
+            >
+              <MaterialIcons name="close" size={20} color="#666" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
 
-      <FoodFormModal 
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#ee4d2d" />
+        </View>
+      ) : (
+        <FlatList
+          data={filteredFoods}
+          renderItem={renderFoodItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContainer}
+          ListEmptyComponent={() => (
+            <View style={styles.emptyContainer}>
+              <MaterialIcons name="restaurant" size={64} color="#ccc" />
+              <Text style={styles.emptyText}>
+                {searchQuery.length > 0 
+                  ? 'Không tìm thấy món ăn nào'
+                  : 'Chưa có món ăn nào'}
+              </Text>
+            </View>
+          )}
+        />
+      )}
+
+      <FoodFormModal
         visible={modalVisible}
         onClose={() => {
           setModalVisible(false);
@@ -570,24 +715,65 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  addButton: {
+    backgroundColor: '#ee4d2d',
+    padding: 12,
+    borderRadius: 8,
+    marginLeft: 12,
+  },
+  addButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  searchContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+  },
+  searchInput: {
+    flex: 1,
+    height: 40,
+    marginLeft: 8,
+    fontSize: 16,
+    color: '#333',
+  },
+  clearButton: {
+    padding: 4,
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 12,
+    textAlign: 'center',
+  },
   listContainer: {
     padding: 12,
-  },
-  fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#ee4d2d',
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
   },
   loadingContainer: {
     flex: 1,
@@ -811,6 +997,51 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  imagePickerModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  imagePickerModalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+  },
+  imagePickerModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  imagePickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 15,
+    borderRadius: 10,
+    backgroundColor: '#f5f5f5',
+    marginBottom: 10,
+  },
+  imagePickerOptionText: {
+    fontSize: 16,
+    color: '#333',
+    marginLeft: 15,
+  },
+  imagePickerCancelButton: {
+    padding: 15,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  imagePickerCancelText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    fontWeight: '500',
   },
 });
 

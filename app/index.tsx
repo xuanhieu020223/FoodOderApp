@@ -10,7 +10,7 @@ import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 
 // Import navigators
 import UserNavigator from '../navigation/UserNavigator';
-import AdminNavigator, { AdminTabParamList } from '../navigation/AdminNavigator';
+import AdminNavigator, { AdminStackParamList } from '../navigation/AdminNavigator';
 
 // Define navigation types
 export type RootStackParamList = {
@@ -19,7 +19,7 @@ export type RootStackParamList = {
   Register: undefined;
   ResetPassword: undefined;
   UserApp: undefined;
-  AdminApp: NavigatorScreenParams<AdminTabParamList>;
+  AdminApp: NavigatorScreenParams<AdminStackParamList>;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();

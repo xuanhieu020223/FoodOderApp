@@ -23,7 +23,7 @@ interface OrderItem {
   name: string;
   quantity: number;
   price: number;
-  image: string;
+  imageUrl: string;
 }
 
 interface Order {
@@ -191,7 +191,7 @@ const OrdersScreen = () => {
       <View style={styles.orderItems}>
         {item.items.map((orderItem, index) => (
           <View key={index} style={styles.orderItem}>
-            <Image source={{ uri: orderItem.image }} style={styles.itemImage} />
+            <Image source={{ uri: orderItem.imageUrl }} style={styles.itemImage} />
             <View style={styles.itemInfo}>
               <Text style={styles.itemName}>{orderItem.name}</Text>
               <Text style={styles.itemQuantity}>x{orderItem.quantity}</Text>

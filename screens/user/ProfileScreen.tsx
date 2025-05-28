@@ -13,29 +13,34 @@ import {
   TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, NavigationProp } from '@react-navigation/native';
-import { CommonActions } from '@react-navigation/native';
+import { useNavigation, CommonActions } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { auth, db } from '../../config/Firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import * as ImagePicker from 'expo-image-picker';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { UserStackParamList, TabParamList } from '../../navigation/UserNavigator';
+import { NavigatorScreenParams } from '@react-navigation/native';
 
-type RootStackParamList = {
-  Welcome: undefined;
-  Address: undefined;
-  Payment: undefined;
-  Vouchers: undefined;
-  Settings: undefined;
-};
+type NavigationProps = NativeStackNavigationProp<UserStackParamList>;
 
-type NavigationProps = NavigationProp<RootStackParamList>;
+interface UserData {
+  name: string;
+  email: string;
+  phone: string;
+  avatar: string;
+  coins: number;
+  vouchers: number;
+  favorites: number;
+}
 
-type MenuItem = {
+interface MenuItem {
   id: string;
   title: string;
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
-};
+  screen: Exclude<keyof UserStackParamList, 'TabNavigator' | 'FoodDetail' | 'Checkout'> | 'Favorites';
+}
 
 const menuItems: MenuItem[] = [
   {
@@ -43,54 +48,51 @@ const menuItems: MenuItem[] = [
     title: 'Thông tin tài khoản',
     icon: 'person-outline',
     color: '#2196F3',
+    screen: 'AccountInfo',
   },
   {
     id: 'address',
     title: 'Sổ địa chỉ',
     icon: 'location-outline',
     color: '#4CAF50',
+    screen: 'Address',
   },
   {
     id: 'payment',
     title: 'Phương thức thanh toán',
     icon: 'card-outline',
     color: '#FF9800',
+    screen: 'Payment',
   },
   {
     id: 'vouchers',
     title: 'Voucher của tôi',
     icon: 'ticket-outline',
     color: '#9C27B0',
+    screen: 'Vouchers',
+  },
+  {
+    id: 'favorites',
+    title: 'Món ăn yêu thích',
+    icon: 'heart-outline',
+    color: '#E91E63',
+    screen: 'Favorites',
   },
   {
     id: 'settings',
     title: 'Cài đặt',
     icon: 'settings-outline',
     color: '#607D8B',
+    screen: 'Settings',
   },
   {
     id: 'help',
     title: 'Trung tâm trợ giúp',
     icon: 'help-circle-outline',
     color: '#00BCD4',
+    screen: 'Help',
   },
-  {
-    id: 'about',
-    title: 'Về ShopeeFood',
-    icon: 'information-circle-outline',
-    color: '#795548',
-  },
-] as const;
-
-interface UserData {
-  name: string;
-  phone: string;
-  email: string;
-  avatar: string;
-  coins: number;
-  vouchers: number;
-  favorites: number;
-}
+];
 
 const ProfileScreen = () => {
   const navigation = useNavigation<NavigationProps>();
@@ -109,7 +111,15 @@ const ProfileScreen = () => {
   const loadUserData = async () => {
     try {
       const user = auth.currentUser;
-      if (!user) return;
+      if (!user) {
+        navigation.dispatch(
+          CommonActions.reset({
+            index: 0,
+            routes: [{ name: 'Login' }],
+          })
+        );
+        return;
+      }
 
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       if (userDoc.exists()) {
@@ -187,7 +197,7 @@ const ProfileScreen = () => {
     }
   };
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     Alert.alert(
       'Xác nhận đăng xuất',
       'Bạn có chắc chắn muốn đăng xuất?',
@@ -202,7 +212,7 @@ const ProfileScreen = () => {
               navigation.dispatch(
                 CommonActions.reset({
                   index: 0,
-                  routes: [{ name: 'Welcome' }],
+                  routes: [{ name: 'Login' }],
                 })
               );
             } catch (error) {
@@ -215,6 +225,16 @@ const ProfileScreen = () => {
     );
   };
 
+  const handleMenuPress = (screen: MenuItem['screen']) => {
+    if (screen === 'Favorites') {
+      navigation.navigate('TabNavigator', {
+        screen: 'Favorites'
+      } as NavigatorScreenParams<TabParamList>);
+    } else {
+      navigation.navigate(screen);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -225,99 +245,102 @@ const ProfileScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Tài khoản</Text>
-      </View>
-
-      <ScrollView>
-        <TouchableOpacity 
-          style={styles.profileCard}
-          onPress={() => {
-            setEditingName(userData?.name || '');
-            setEditingPhone(userData?.phone || '');
-            setEditModalVisible(true);
-          }}
-        >
-          <View style={styles.profileInfo}>
-            <TouchableOpacity 
-              style={styles.avatarContainer}
-              onPress={handlePickImage}
-              disabled={uploadingImage}
-            >
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <View style={styles.headerContainer}>
+          <View style={styles.headerContent}>
+            <TouchableOpacity style={styles.avatarContainer} onPress={handlePickImage}>
               {uploadingImage ? (
-                <ActivityIndicator size="small" color="#ee4d2d" />
+                <ActivityIndicator size="large" color="#fff" />
               ) : (
-                <Image
-                  source={{ 
-                    uri: userData?.avatar || `https://ui-avatars.com/api/?name=${userData?.name}&background=ee4d2d&color=fff`
-                  }}
-                  style={styles.avatar}
-                />
+                <>
+                  <Image
+                    source={
+                      userData?.avatar
+                        ? { uri: userData.avatar }
+                        : { 
+                            uri: `https://ui-avatars.com/api/?name=${encodeURIComponent(userData?.name || 'User')}&background=ee4d2d&color=fff&size=200`
+                          }
+                    }
+                    style={styles.avatar}
+                  />
+                  <View style={styles.editAvatarButton}>
+                    <Ionicons name="camera" size={20} color="#fff" />
+                  </View>
+                </>
               )}
-              <View style={styles.editAvatarButton}>
-                <Ionicons name="camera" size={14} color="#fff" />
-              </View>
             </TouchableOpacity>
-            <View>
-              <Text style={styles.userName}>{userData?.name || 'Người dùng'}</Text>
-              <Text style={styles.userPhone}>{userData?.phone || ''}</Text>
+            
+            <View style={styles.profileInfo}>
+              <Text style={styles.name}>{userData?.name || 'Chưa cập nhật'}</Text>
+              <Text style={styles.email}>{userData?.email || 'Chưa cập nhật'}</Text>
+              <TouchableOpacity
+                style={styles.editButton}
+                onPress={() => {
+                  setEditingName(userData?.name || '');
+                  setEditingPhone(userData?.phone || '');
+                  setEditModalVisible(true);
+                }}
+              >
+                <Ionicons name="pencil" size={16} color="#fff" style={styles.editIcon} />
+                <Text style={styles.editButtonText}>Chỉnh sửa thông tin</Text>
+              </TouchableOpacity>
             </View>
           </View>
-          <Ionicons name="chevron-forward" size={24} color="#666" />
-        </TouchableOpacity>
 
-        <View style={styles.statsCard}>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{userData?.coins || 0}</Text>
-            <Text style={styles.statLabel}>Xu</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{userData?.vouchers || 0}</Text>
-            <Text style={styles.statLabel}>Voucher</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{userData?.favorites || 0}</Text>
-            <Text style={styles.statLabel}>Yêu thích</Text>
+          <View style={styles.statsContainer}>
+            <View style={styles.statItem}>
+              <View style={[styles.statIconContainer, { backgroundColor: '#FFE0B2' }]}>
+                <Ionicons name="cash-outline" size={24} color="#FF9800" />
+              </View>
+              <Text style={styles.statValue}>{userData?.coins || 0}</Text>
+              <Text style={styles.statLabel}>Xu</Text>
+            </View>
+            <View style={styles.statItem}>
+              <View style={[styles.statIconContainer, { backgroundColor: '#E1BEE7' }]}>
+                <Ionicons name="ticket" size={24} color="#9C27B0" />
+              </View>
+              <Text style={styles.statValue}>{userData?.vouchers || 0}</Text>
+              <Text style={styles.statLabel}>Voucher</Text>
+            </View>
+            <View style={styles.statItem}>
+              <View style={[styles.statIconContainer, { backgroundColor: '#FFCDD2' }]}>
+                <Ionicons name="heart" size={24} color="#F44336" />
+              </View>
+              <Text style={styles.statValue}>{userData?.favorites || 0}</Text>
+              <Text style={styles.statLabel}>Yêu thích</Text>
+            </View>
           </View>
         </View>
 
-        <View style={styles.menuSection}>
-          {menuItems.map(item => (
-            <TouchableOpacity 
-              key={item.id} 
-              style={styles.menuItem}
-              onPress={() => {
-                if (item.id === 'address') {
-                  navigation.navigate('Address');
-                } else if (item.id === 'payment') {
-                  navigation.navigate('Payment');
-                } else if (item.id === 'vouchers') {
-                  navigation.navigate('Vouchers');
-                } else if (item.id === 'settings') {
-                  navigation.navigate('Settings');
-                }
-              }}
+        <View style={styles.menuContainer}>
+          {menuItems.map((item, index) => (
+            <TouchableOpacity
+              key={item.id}
+              style={[
+                styles.menuItem,
+                index === menuItems.length - 1 && styles.lastMenuItem
+              ]}
+              onPress={() => handleMenuPress(item.screen)}
             >
-              <View style={styles.menuItemLeft}>
-                <View style={[styles.menuIcon, { backgroundColor: item.color }]}>
-                  <Ionicons name={item.icon} size={20} color="#fff" />
-                </View>
+              <View style={[styles.menuIcon, { backgroundColor: item.color }]}>
+                <Ionicons name={item.icon} size={24} color="#fff" />
+              </View>
+              <View style={styles.menuContent}>
                 <Text style={styles.menuTitle}>{item.title}</Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#666" />
+              <Ionicons name="chevron-forward" size={20} color="#999" />
             </TouchableOpacity>
           ))}
         </View>
 
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Ionicons name="log-out-outline" size={24} color="#ee4d2d" />
           <Text style={styles.logoutText}>Đăng xuất</Text>
         </TouchableOpacity>
 
         <Text style={styles.versionText}>Phiên bản 1.0.0</Text>
       </ScrollView>
-
+      
       <Modal
         visible={editModalVisible}
         animationType="slide"
@@ -329,8 +352,8 @@ const ProfileScreen = () => {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Chỉnh sửa thông tin</Text>
               <TouchableOpacity
-                style={styles.closeButton}
                 onPress={() => setEditModalVisible(false)}
+                style={styles.modalCloseButton}
               >
                 <Ionicons name="close" size={24} color="#666" />
               </TouchableOpacity>
@@ -373,7 +396,7 @@ const ProfileScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f8f9fa',
   },
   loadingContainer: {
     flex: 1,
@@ -381,129 +404,169 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#fff',
   },
-  header: {
+  headerContainer: {
     backgroundColor: '#fff',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    paddingTop: 16,
+    paddingBottom: 24,
+    marginBottom: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-  },
-  profileCard: {
-    backgroundColor: '#fff',
-    padding: 16,
-    flexDirection: 'row',
+  headerContent: {
+    flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  profileInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingHorizontal: 20,
   },
   avatarContainer: {
     position: 'relative',
-    marginRight: 16,
+    marginBottom: 16,
   },
   avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 3,
+    borderColor: '#fff',
   },
   editAvatarButton: {
     position: 'absolute',
     right: -4,
     bottom: -4,
     backgroundColor: '#ee4d2d',
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
     borderColor: '#fff',
   },
-  userName: {
-    fontSize: 18,
+  profileInfo: {
+    alignItems: 'center',
+  },
+  name: {
+    fontSize: 24,
     fontWeight: '600',
     color: '#333',
     marginBottom: 4,
   },
-  userPhone: {
+  email: {
     fontSize: 14,
     color: '#666',
+    marginBottom: 12,
   },
-  statsCard: {
-    backgroundColor: '#fff',
+  editButton: {
     flexDirection: 'row',
-    paddingVertical: 16,
-    marginBottom: 8,
+    alignItems: 'center',
+    backgroundColor: '#ee4d2d',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  editIcon: {
+    marginRight: 8,
+  },
+  editButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingHorizontal: 16,
+    paddingTop: 24,
   },
   statItem: {
-    flex: 1,
     alignItems: 'center',
+  },
+  statIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   statValue: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#ee4d2d',
+    fontWeight: '700',
+    color: '#333',
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 14,
     color: '#666',
   },
-  statDivider: {
-    width: 1,
-    backgroundColor: '#eee',
-  },
-  menuSection: {
+  menuContainer: {
     backgroundColor: '#fff',
-    marginBottom: 8,
+    borderRadius: 16,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 8,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: '#f0f0f0',
   },
-  menuItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  lastMenuItem: {
+    borderBottomWidth: 0,
   },
   menuIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 16,
+  },
+  menuContent: {
+    flex: 1,
   },
   menuTitle: {
     fontSize: 16,
     color: '#333',
+    fontWeight: '500',
   },
   logoutButton: {
-    backgroundColor: '#fff',
-    marginTop: 8,
-    padding: 16,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 16,
+    borderRadius: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
   },
   logoutText: {
     fontSize: 16,
     color: '#ee4d2d',
     fontWeight: '600',
+    marginLeft: 8,
   },
   versionText: {
     textAlign: 'center',
-    color: '#666',
+    color: '#999',
     fontSize: 14,
-    marginTop: 16,
+    marginTop: 8,
     marginBottom: 32,
   },
   modalContainer: {
@@ -528,7 +591,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
   },
-  closeButton: {
+  modalCloseButton: {
     padding: 4,
   },
   formGroup: {

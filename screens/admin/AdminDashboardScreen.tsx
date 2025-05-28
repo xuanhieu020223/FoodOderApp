@@ -66,8 +66,12 @@ const AdminDashboardScreen = () => {
   const handleLogout = async () => {
     try {
       await auth.signOut();
-      navigation.replace('AdminLogin' as any);
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Login' as any }],
+      });
     } catch (error) {
+      console.error('Logout error:', error);
       Alert.alert('Lỗi', 'Không thể đăng xuất. Vui lòng thử lại.');
     }
   };

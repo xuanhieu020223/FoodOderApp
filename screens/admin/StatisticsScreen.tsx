@@ -6,25 +6,31 @@ import {
   ScrollView,
   ActivityIndicator,
   TouchableOpacity,
+  Dimensions,
+  RefreshControl,
 } from 'react-native';
-import { collection, query, getDocs, where, orderBy } from 'firebase/firestore';
+import { collection, query, getDocs, where, orderBy, Timestamp } from 'firebase/firestore';
 import { db } from '../../config/Firebase';
 import { LineChart, BarChart } from 'react-native-chart-kit';
-import { Dimensions } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 
 const screenWidth = Dimensions.get('window').width;
 
 type Order = {
   id: string;
   totalAmount: number;
-  status: string;
-  createdAt: any;
+  status: 'pending' | 'confirmed' | 'preparing' | 'shipping' | 'delivered' | 'cancelled';
+  createdAt: {
+    toDate: () => Date;
+  };
   items: {
     foodId: string;
     name: string;
     quantity: number;
   }[];
   userId: string;
+  customerName?: string;
+  customerPhone?: string;
 };
 
 type User = {
@@ -33,8 +39,33 @@ type User = {
   orderCount: number;
 };
 
+type TimeRange = 'today' | 'week' | 'month' | 'year';
+
+type StatisticData = {
+  totalRevenue: number;
+  totalOrders: number;
+  averageOrderValue: number;
+  successRate: number;
+  chartData: {
+    labels: string[];
+    datasets: number[];
+  };
+};
+
 const StatisticsScreen = () => {
+  const [timeRange, setTimeRange] = useState<TimeRange>('week');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [statistics, setStatistics] = useState<StatisticData>({
+    totalRevenue: 0,
+    totalOrders: 0,
+    averageOrderValue: 0,
+    successRate: 0,
+    chartData: {
+      labels: [],
+      datasets: [],
+    },
+  });
   const [revenueData, setRevenueData] = useState<{
     labels: string[];
     datasets: { data: number[] }[];
@@ -51,26 +82,146 @@ const StatisticsScreen = () => {
   });
   const [topFoods, setTopFoods] = useState<{ name: string; quantity: number }[]>([]);
   const [topUsers, setTopUsers] = useState<User[]>([]);
-  const [timeRange, setTimeRange] = useState<'day' | 'month'>('day');
 
   useEffect(() => {
     loadStatistics();
   }, [timeRange]);
 
+  const getTimeRangeFilter = () => {
+    const now = new Date();
+    switch (timeRange) {
+      case 'today':
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        return {
+          start: startOfDay,
+          end: now,
+          format: (date: Date) => date.getHours() + 'h',
+          interval: 'hour',
+        };
+      case 'week':
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - 7);
+        return {
+          start: startOfWeek,
+          end: now,
+          format: (date: Date) => date.getDate() + '/' + (date.getMonth() + 1),
+          interval: 'day',
+        };
+      case 'month':
+        const startOfMonth = new Date(now);
+        startOfMonth.setMonth(now.getMonth() - 1);
+        return {
+          start: startOfMonth,
+          end: now,
+          format: (date: Date) => date.getDate() + '/' + (date.getMonth() + 1),
+          interval: 'day',
+        };
+      case 'year':
+        const startOfYear = new Date(now);
+        startOfYear.setFullYear(now.getFullYear() - 1);
+        return {
+          start: startOfYear,
+          end: now,
+          format: (date: Date) => (date.getMonth() + 1) + '/' + date.getFullYear(),
+          interval: 'month',
+        };
+    }
+  };
+
   const loadStatistics = async () => {
     try {
       setLoading(true);
+      const timeFilter = getTimeRangeFilter();
+      const ordersRef = collection(db, 'orders');
+      const q = query(
+        ordersRef,
+        where('createdAt', '>=', Timestamp.fromDate(timeFilter.start)),
+        where('createdAt', '<=', Timestamp.fromDate(timeFilter.end)),
+        orderBy('createdAt', 'asc')
+      );
+
+      const querySnapshot = await getDocs(q);
+      const orders = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        totalAmount: doc.data().totalAmount || 0,
+        status: doc.data().status || 'pending',
+        createdAt: doc.data().createdAt,
+        items: doc.data().items || [],
+        userId: doc.data().userId || '',
+        customerName: doc.data().customerName || '',
+        customerPhone: doc.data().customerPhone || '',
+      } as Order));
+
+      // Tính toán thống kê cơ bản
+      const completedOrders = orders.filter(order => order.status === 'delivered');
+      const totalRevenue = completedOrders.reduce((sum, order) => sum + order.totalAmount, 0);
+      const averageOrderValue = completedOrders.length > 0 ? totalRevenue / completedOrders.length : 0;
+      const successRate = orders.length > 0 ? (completedOrders.length / orders.length) * 100 : 0;
+
+      // Tạo dữ liệu cho biểu đồ
+      const chartData = generateChartData(completedOrders, timeFilter);
+
+      setStatistics({
+        totalRevenue,
+        totalOrders: orders.length,
+        averageOrderValue,
+        successRate,
+        chartData,
+      });
+
       await Promise.all([
         loadRevenueData(),
         loadOrderStatusData(),
         loadTopFoods(),
         loadTopUsers(),
       ]);
-      setLoading(false);
     } catch (error) {
       console.error('Error loading statistics:', error);
+    } finally {
       setLoading(false);
     }
+  };
+
+  const generateChartData = (orders: any[], timeFilter: any) => {
+    const labels: string[] = [];
+    const datasets: number[] = [];
+    const dataMap = new Map();
+
+    // Tạo các mốc thời gian
+    let current = new Date(timeFilter.start);
+    while (current <= timeFilter.end) {
+      const label = timeFilter.format(current);
+      labels.push(label);
+      dataMap.set(label, 0);
+
+      switch (timeFilter.interval) {
+        case 'hour':
+          current = new Date(current.setHours(current.getHours() + 1));
+          break;
+        case 'day':
+          current = new Date(current.setDate(current.getDate() + 1));
+          break;
+        case 'month':
+          current = new Date(current.setMonth(current.getMonth() + 1));
+          break;
+      }
+    }
+
+    // Tính tổng doanh thu theo từng mốc thời gian
+    orders.forEach(order => {
+      const date = order.createdAt.toDate();
+      const label = timeFilter.format(date);
+      if (dataMap.has(label)) {
+        dataMap.set(label, dataMap.get(label) + (order.totalAmount || 0));
+      }
+    });
+
+    // Chuyển đổi dữ liệu cho biểu đồ
+    dataMap.forEach((value) => {
+      datasets.push(value);
+    });
+
+    return { labels, datasets };
   };
 
   const loadRevenueData = async () => {
@@ -78,10 +229,15 @@ const StatisticsScreen = () => {
     const now = new Date();
     const startDate = new Date();
     
-    if (timeRange === 'day') {
+    if (timeRange === 'week') {
       startDate.setDate(now.getDate() - 7); // 7 ngày gần nhất
+    } else if (timeRange === 'month') {
+      startDate.setMonth(now.getMonth() - 1); // 1 tháng gần nhất
+    } else if (timeRange === 'year') {
+      startDate.setFullYear(now.getFullYear() - 1); // 1 năm gần nhất
     } else {
-      startDate.setMonth(now.getMonth() - 6); // 6 tháng gần nhất
+      // today
+      startDate.setHours(0, 0, 0, 0); // Bắt đầu từ 00:00:00 của ngày hôm nay
     }
 
     const q = query(
@@ -97,9 +253,9 @@ const StatisticsScreen = () => {
     querySnapshot.forEach((doc) => {
       const order = doc.data() as Order;
       const date = order.createdAt.toDate();
-      const dateKey = timeRange === 'day'
-        ? date.toLocaleDateString('vi-VN')
-        : `${date.getMonth() + 1}/${date.getFullYear()}`;
+      const dateKey = timeRange === 'year'
+        ? `${date.getMonth() + 1}/${date.getFullYear()}`
+        : date.toLocaleDateString('vi-VN');
 
       const currentAmount = revenueByDate.get(dateKey) || 0;
       revenueByDate.set(dateKey, currentAmount + order.totalAmount);
@@ -190,6 +346,19 @@ const StatisticsScreen = () => {
     setTopUsers(sortedUsers);
   };
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadStatistics();
+    setRefreshing(false);
+  };
+
+  const formatCurrency = (amount: number) => {
+    return amount.toLocaleString('vi-VN', {
+      style: 'currency',
+      currency: 'VND',
+    });
+  };
+
   const chartConfig = {
     backgroundGradientFrom: '#fff',
     backgroundGradientTo: '#fff',
@@ -208,50 +377,114 @@ const StatisticsScreen = () => {
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Thống kê</Text>
-      </View>
+    <ScrollView
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    >
+      {/* <View style={styles.header}>
+        <Text style={styles.headerTitle}>Thống kê doanh thu</Text>
+      </View> */}
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Doanh thu</Text>
-        <View style={styles.timeRangeButtons}>
+      <View style={styles.timeFilter}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <TouchableOpacity
-            style={[
-              styles.timeRangeButton,
-              timeRange === 'day' && styles.timeRangeButtonActive,
-            ]}
-            onPress={() => setTimeRange('day')}
+            style={[styles.filterButton, timeRange === 'today' && styles.filterButtonActive]}
+            onPress={() => setTimeRange('today')}
           >
-            <Text style={[
-              styles.timeRangeButtonText,
-              timeRange === 'day' && styles.timeRangeButtonTextActive,
-            ]}>
-              7 ngày
+            <Text style={[styles.filterText, timeRange === 'today' && styles.filterTextActive]}>
+              Hôm nay
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[
-              styles.timeRangeButton,
-              timeRange === 'month' && styles.timeRangeButtonActive,
-            ]}
+            style={[styles.filterButton, timeRange === 'week' && styles.filterButtonActive]}
+            onPress={() => setTimeRange('week')}
+          >
+            <Text style={[styles.filterText, timeRange === 'week' && styles.filterTextActive]}>
+              7 ngày qua
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterButton, timeRange === 'month' && styles.filterButtonActive]}
             onPress={() => setTimeRange('month')}
           >
-            <Text style={[
-              styles.timeRangeButtonText,
-              timeRange === 'month' && styles.timeRangeButtonTextActive,
-            ]}>
-              6 tháng
+            <Text style={[styles.filterText, timeRange === 'month' && styles.filterTextActive]}>
+              30 ngày qua
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterButton, timeRange === 'year' && styles.filterButtonActive]}
+            onPress={() => setTimeRange('year')}
+          >
+            <Text style={[styles.filterText, timeRange === 'year' && styles.filterTextActive]}>
+              12 tháng qua
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+
+      <View style={styles.statsGrid}>
+        <View style={styles.statsCard}>
+          <View style={styles.statsIconContainer}>
+            <MaterialIcons name="attach-money" size={24} color="#ee4d2d" />
+          </View>
+          <Text style={styles.statsLabel}>Doanh thu</Text>
+          <Text style={styles.statsValue}>{formatCurrency(statistics.totalRevenue)}</Text>
         </View>
+
+        <View style={styles.statsCard}>
+          <View style={styles.statsIconContainer}>
+            <MaterialIcons name="shopping-cart" size={24} color="#2196F3" />
+          </View>
+          <Text style={styles.statsLabel}>Tổng đơn</Text>
+          <Text style={styles.statsValue}>{statistics.totalOrders}</Text>
+        </View>
+
+        <View style={styles.statsCard}>
+          <View style={styles.statsIconContainer}>
+            <MaterialIcons name="trending-up" size={24} color="#4CAF50" />
+          </View>
+          <Text style={styles.statsLabel}>Trung bình</Text>
+          <Text style={styles.statsValue}>{formatCurrency(statistics.averageOrderValue)}</Text>
+        </View>
+
+        <View style={styles.statsCard}>
+          <View style={styles.statsIconContainer}>
+            <MaterialIcons name="check-circle" size={24} color="#9C27B0" />
+          </View>
+          <Text style={styles.statsLabel}>Tỷ lệ thành công</Text>
+          <Text style={styles.statsValue}>{statistics.successRate.toFixed(1)}%</Text>
+        </View>
+      </View>
+
+      <View style={styles.chartContainer}>
+        <Text style={styles.chartTitle}>Biểu đồ doanh thu</Text>
         <LineChart
-          data={revenueData}
-          width={screenWidth - 32}
+          data={{
+            labels: statistics.chartData.labels,
+            datasets: [
+              {
+                data: statistics.chartData.datasets.length > 0 
+                  ? statistics.chartData.datasets 
+                  : [0],
+              },
+            ],
+          }}
+          width={Dimensions.get('window').width - 32}
           height={220}
-          chartConfig={chartConfig}
-          bezier
+          chartConfig={{
+            backgroundColor: '#fff',
+            backgroundGradientFrom: '#fff',
+            backgroundGradientTo: '#fff',
+            decimalPlaces: 0,
+            color: (opacity = 1) => `rgba(238, 77, 45, ${opacity})`,
+            style: {
+              borderRadius: 16,
+            },
+          }}
           style={styles.chart}
+          bezier
         />
       </View>
 
@@ -318,6 +551,88 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  timeFilter: {
+    backgroundColor: '#fff',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  filterButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f5f5f5',
+    marginRight: 8,
+  },
+  filterButtonActive: {
+    backgroundColor: '#ee4d2d',
+  },
+  filterText: {
+    color: '#666',
+    fontSize: 14,
+  },
+  filterTextActive: {
+    color: '#fff',
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: 8,
+  },
+  statsCard: {
+    width: '50%',
+    padding: 8,
+  },
+  statsIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  statsContent: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  statsLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  statsValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  chartContainer: {
+    backgroundColor: '#fff',
+    margin: 16,
+    padding: 16,
+    borderRadius: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  chartTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 16,
+  },
+  chart: {
+    marginVertical: 8,
+    borderRadius: 16,
+  },
   section: {
     backgroundColor: '#fff',
     margin: 16,
@@ -334,30 +649,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
     marginBottom: 16,
-  },
-  timeRangeButtons: {
-    flexDirection: 'row',
-    marginBottom: 16,
-  },
-  timeRangeButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#f5f5f5',
-    marginRight: 8,
-  },
-  timeRangeButtonActive: {
-    backgroundColor: '#ee4d2d',
-  },
-  timeRangeButtonText: {
-    color: '#666',
-  },
-  timeRangeButtonTextActive: {
-    color: '#fff',
-  },
-  chart: {
-    marginVertical: 8,
-    borderRadius: 16,
   },
   rankingItem: {
     flexDirection: 'row',
