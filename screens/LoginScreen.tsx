@@ -54,6 +54,13 @@ const LogIn = () => {
             routes: [{ name: 'AdminApp' }],
           })
         );
+      } else if (userData.role === 'shipper') {
+        navigation.dispatch(
+          CommonActions.reset({
+            index: 0,
+            routes: [{ name: 'ShipperApp' }],
+          })
+        );
       } else {
         navigation.dispatch(
           CommonActions.reset({

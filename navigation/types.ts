@@ -3,5 +3,5 @@ export type RootStackParamList = {
     LogIn: undefined;
     Register: undefined;
     Home: undefined;
-  };
-  
+    ShipperApp: undefined;
+};

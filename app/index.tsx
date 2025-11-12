@@ -11,6 +11,7 @@ import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 // Import navigators
 import UserNavigator from '../navigation/UserNavigator';
 import AdminNavigator, { AdminStackParamList } from '../navigation/AdminNavigator';
+import ShipperNavigator from '../navigation/ShipperNavigator';
 
 // Define navigation types
 export type RootStackParamList = {
@@ -20,6 +21,7 @@ export type RootStackParamList = {
   ResetPassword: undefined;
   UserApp: undefined;
   AdminApp: NavigatorScreenParams<AdminStackParamList>;
+  ShipperApp: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -64,6 +66,11 @@ const AppNavigator = () => {
       <Stack.Screen
         name="AdminApp"
         component={AdminNavigator}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="ShipperApp"
+        component={ShipperNavigator}
         options={{ headerShown: false }}
       />
     </Stack.Navigator>
