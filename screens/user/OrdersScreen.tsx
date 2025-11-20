@@ -29,9 +29,9 @@ interface OrderItem {
 interface Order {
   id: string;
   userId: string;
-  restaurantId: string;
-  restaurantName: string;
-  restaurantImage: string;
+  restaurantId?: string;
+  restaurantName?: string;
+  restaurantImage?: string;
   items: OrderItem[];
   totalAmount: number;
   status: OrderStatus;
@@ -41,6 +41,8 @@ interface Order {
   rating?: number;
   review?: string;
 }
+
+const DEFAULT_RESTAURANT_IMAGE = 'https://cdn-icons-png.flaticon.com/512/3595/3595455.png';
 
 const OrdersScreen = () => {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -81,7 +83,10 @@ const OrdersScreen = () => {
       const ordersData: Order[] = [];
       
       querySnapshot.forEach((doc) => {
-        ordersData.push({ id: doc.id, ...doc.data() } as Order);
+        ordersData.push({
+          id: doc.id,
+          ...doc.data(),
+        } as Order);
       });
       
       setOrders(ordersData);
@@ -175,9 +180,14 @@ const OrdersScreen = () => {
     <View style={styles.orderCard}>
       <View style={styles.orderHeader}>
         <View style={styles.restaurantInfo}>
-          <Image source={{ uri: item.restaurantImage }} style={styles.restaurantImage} />
+          <Image
+            source={{ uri: item.restaurantImage || DEFAULT_RESTAURANT_IMAGE }}
+            style={styles.restaurantImage}
+          />
           <View>
-            <Text style={styles.restaurantName}>{item.restaurantName}</Text>
+            <Text style={styles.restaurantName}>
+              {item.restaurantName || 'Đối tác FoodOrder'}
+            </Text>
             <Text style={styles.orderDate}>
               {item.createdAt.toDate().toLocaleString('vi-VN')}
             </Text>

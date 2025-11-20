@@ -25,6 +25,9 @@ type CartItem = {
   price: number;
   name: string;
   imageUrl: string;
+  restaurantId?: string;
+  restaurantName?: string;
+  restaurantImage?: string;
   userId: string;
   createdAt: Date;
 };
@@ -169,6 +172,9 @@ const CartScreen = () => {
       
       <View style={styles.itemInfo}>
         <Text style={styles.itemName}>{item.name}</Text>
+        {item.restaurantName && (
+          <Text style={styles.restaurantName}>{item.restaurantName}</Text>
+        )}
         <Text style={styles.itemPrice}>
           {item.price.toLocaleString('vi-VN', {
             style: 'currency',
@@ -364,6 +370,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
+    marginBottom: 4,
+  },
+  restaurantName: {
+    fontSize: 12,
+    color: '#6b7280',
     marginBottom: 4,
   },
   itemPrice: {

@@ -12,12 +12,15 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import { Ionicons, Feather, AntDesign } from '@expo/vector-icons';
+import { Feather, AntDesign } from '@expo/vector-icons';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
+
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '../config/Firebase';
 import { collection, setDoc, doc, query, where, getDocs } from 'firebase/firestore';
+
+type AccountRole = 'customer' | 'restaurant';
 
 const Register = () => {
   const navigation = useNavigation<any>();
@@ -28,6 +31,10 @@ const Register = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [role, setRole] = useState<AccountRole>('customer');
+  const [restaurantName, setRestaurantName] = useState('');
+  const [restaurantAddress, setRestaurantAddress] = useState('');
+  const [restaurantPhone, setRestaurantPhone] = useState('');
 
   const handleRegister = async () => {
     if (!username || !email || !password || !confirmPassword) {
@@ -45,8 +52,13 @@ const Register = () => {
       return;
     }
 
+    if (role === 'restaurant' && (!restaurantName.trim() || !restaurantAddress.trim())) {
+      Alert.alert('Lỗi', 'Vui lòng nhập thông tin nhà hàng.');
+      return;
+    }
+
     try {
-      // Kiểm tra username đã tồn tại chưa
+      // Kiểm tra username trùng
       const usersRef = collection(db, 'users');
       const q = query(usersRef, where('username', '==', username.trim()));
       const querySnapshot = await getDocs(q);
@@ -56,34 +68,47 @@ const Register = () => {
         return;
       }
 
-      // Tạo tài khoản với Firebase Auth
+      // Đăng ký Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
       const user = userCredential.user;
 
       // Lưu thông tin user vào Firestore
       await setDoc(doc(db, 'users', user.uid), {
         uid: user.uid,
-        email: email.trim().toLowerCase(),
+        email: email.toLowerCase(),
         username: username.trim(),
+        name: username.trim(),
+        role,
         createdAt: new Date(),
       });
 
+      // Nếu là chủ nhà hàng
+      if (role === 'restaurant') {
+        await setDoc(doc(db, 'restaurants', user.uid), {
+          ownerId: user.uid,
+          name: restaurantName.trim(),
+          address: restaurantAddress.trim(),
+          phone: restaurantPhone.trim(),
+          image: 'https://cdn-icons-png.flaticon.com/512/3595/3595455.png',
+          rating: 4.8,
+          createdAt: new Date(),
+        });
+      }
+
       Alert.alert('Thành công', 'Tài khoản đã được tạo!', [
-        {
-          text: 'OK',
-          onPress: () => navigation.navigate('Login')
-        }
+        { text: 'OK', onPress: () => navigation.navigate('Login') }
       ]);
+
     } catch (error: any) {
-      console.error('Register error:', error);
+      console.log(error.code);
       if (error.code === 'auth/email-already-in-use') {
-        Alert.alert('Đăng ký thất bại', 'Email đã được sử dụng.');
+        Alert.alert('Lỗi', 'Email đã được sử dụng.');
       } else if (error.code === 'auth/invalid-email') {
-        Alert.alert('Đăng ký thất bại', 'Email không hợp lệ.');
+        Alert.alert('Lỗi', 'Email không hợp lệ.');
       } else if (error.code === 'auth/weak-password') {
-        Alert.alert('Đăng ký thất bại', 'Mật khẩu quá yếu.');
+        Alert.alert('Lỗi', 'Mật khẩu quá yếu.');
       } else {
-        Alert.alert('Đăng ký thất bại', 'Đã có lỗi xảy ra. Vui lòng thử lại sau.');
+        Alert.alert('Lỗi', 'Có lỗi xảy ra. Vui lòng thử lại.');
       }
     }
   };
@@ -96,17 +121,47 @@ const Register = () => {
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Animated.View style={styles.content} entering={FadeInUp.duration(600)}>
+          
+          {/* Logo */}
           <View style={styles.logoContainer}>
             <Image 
-              source={require('../assets/images/logo.png')} 
+              source={require('../assets/images/logo.png')}
               style={styles.logo}
-              resizeMode="contain"
             />
           </View>
+
           <Text style={styles.titleText}>Đăng Ký</Text>
 
+          {/* Chọn vai trò */}
+          <View style={styles.roleSwitcher}>
+            {[
+              { label: 'Khách hàng', value: 'customer' },
+              { label: 'Nhà hàng', value: 'restaurant' },
+            ].map(option => (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.roleButton,
+                  role === option.value && styles.roleButtonActive,
+                ]}
+                onPress={() => setRole(option.value as AccountRole)}
+              >
+                <Text
+                  style={[
+                    styles.roleButtonText,
+                    role === option.value && styles.roleButtonTextActive,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Form */}
           <View style={styles.formContainer}>
-            
+
+            {/* Username */}
             <View style={styles.inputContainer}>
               <TextInput
                 placeholder="Tên đăng nhập"
@@ -117,6 +172,7 @@ const Register = () => {
               />
             </View>
 
+            {/* Email */}
             <View style={styles.inputContainer}>
               <TextInput
                 placeholder="Email"
@@ -128,6 +184,7 @@ const Register = () => {
               />
             </View>
 
+            {/* Password */}
             <View style={styles.inputContainer}>
               <TextInput
                 placeholder="Mật khẩu"
@@ -137,15 +194,11 @@ const Register = () => {
                 onChangeText={setPassword}
               />
               <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                <Feather
-                  name={showPassword ? 'eye-off' : 'eye'}
-                  size={20}
-                  color="#666"
-                  style={styles.eyeIcon}
-                />
+                <Feather name={showPassword ? 'eye-off' : 'eye'} size={20} color="#666" />
               </TouchableOpacity>
             </View>
 
+            {/* Confirm Password */}
             <View style={styles.inputContainer}>
               <TextInput
                 placeholder="Xác nhận mật khẩu"
@@ -155,28 +208,46 @@ const Register = () => {
                 onChangeText={setConfirmPassword}
               />
               <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
-                <Feather
-                  name={showConfirmPassword ? 'eye-off' : 'eye'}
-                  size={20}
-                  color="#666"
-                  style={styles.eyeIcon}
-                />
+                <Feather name={showConfirmPassword ? 'eye-off' : 'eye'} size={20} color="#666" />
               </TouchableOpacity>
             </View>
 
+            {/* --- Nếu là chủ nhà hàng thì mới hiện form nhà hàng --- */}
+            {role === 'restaurant' && (
+              <>
+                <View style={styles.inputContainer}>
+                  <TextInput
+                    placeholder="Tên nhà hàng"
+                    style={styles.textInput}
+                    value={restaurantName}
+                    onChangeText={setRestaurantName}
+                  />
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <TextInput
+                    placeholder="Địa chỉ nhà hàng"
+                    style={styles.textInput}
+                    value={restaurantAddress}
+                    onChangeText={setRestaurantAddress}
+                  />
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <TextInput
+                    placeholder="Số điện thoại liên hệ"
+                    style={styles.textInput}
+                    keyboardType="phone-pad"
+                    value={restaurantPhone}
+                    onChangeText={setRestaurantPhone}
+                  />
+                </View>
+              </>
+            )}
+
+            {/* Button đăng ký */}
             <TouchableOpacity style={styles.registerButton} onPress={handleRegister}>
               <Text style={styles.registerButtonText}>Đăng ký</Text>
-            </TouchableOpacity>
-
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>Hoặc</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            <TouchableOpacity style={styles.googleButton}>
-              <AntDesign name="google" size={20} color="#EA4335" style={styles.googleIcon} />
-              <Text style={styles.googleText}>Đăng ký bằng Google</Text>
             </TouchableOpacity>
 
             <View style={styles.loginRedirect}>
@@ -184,137 +255,89 @@ const Register = () => {
                 Đã có tài khoản?{' '}
                 <Text
                   style={styles.loginLink}
-                  onPress={() => navigation.navigate('Login' as never)}
+                  onPress={() => navigation.navigate('Login')}
                 >
                   Đăng nhập
                 </Text>
               </Text>
             </View>
           </View>
+
         </Animated.View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 };
 
+/* ======================= STYLES ======================= */
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  scrollContent: {
-    flexGrow: 1,
-  },
-  content: {
-    flex: 1,
-    padding: 24,
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginTop: 40,
-    marginBottom: 40,
-  },
-  logo: {
-    width: 120,
-    height: 120,
-  },
-  formContainer: {
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: '#fff' },
+  scrollContent: { flexGrow: 1 },
+  content: { padding: 24 },
+  logoContainer: { alignItems: 'center', marginTop: 40, marginBottom: 20 },
+  logo: { width: 120, height: 120 },
   titleText: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 32,
     textAlign: 'center',
+    marginBottom: 24,
   },
-  
-  welcomeText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
+
+  /* Role buttons */
+  roleSwitcher: {
+    flexDirection: 'row',
+    backgroundColor: '#f3f4f6',
+    padding: 4,
+    borderRadius: 999,
+    marginBottom: 20,
   },
-  subText: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 32,
+  roleButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 999,
+    alignItems: 'center',
   },
+  roleButtonActive: {
+    backgroundColor: '#fff',
+    elevation: 2,
+  },
+  roleButtonText: { color: '#6b7280', fontWeight: '600', fontSize: 14 },
+  roleButtonTextActive: { color: '#ee4d2d' },
+
+  formContainer: { flex: 1 },
+
+  /* Input fields */
   inputContainer: {
     flexDirection: 'row',
     borderWidth: 1,
     borderColor: '#ddd',
+    backgroundColor: '#f8f8f8',
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
     alignItems: 'center',
     marginBottom: 16,
-    backgroundColor: '#f8f8f8',
   },
-  textInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#333',
-  },
-  eyeIcon: {
-    padding: 4,
-  },
+  textInput: { flex: 1, fontSize: 16, color: '#333' },
+
   registerButton: {
     backgroundColor: '#ee4d2d',
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',
-    marginBottom: 24,
+    marginTop: 10,
   },
   registerButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
   },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#ddd',
-  },
-  dividerText: {
-    marginHorizontal: 16,
-    color: '#666',
-    fontSize: 14,
-  },
-  googleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderColor: '#ddd',
-    borderWidth: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    justifyContent: 'center',
-    backgroundColor: '#fff',
-  },
-  googleIcon: {
-    marginRight: 8,
-  },
-  googleText: {
-    fontSize: 16,
-    color: '#333',
-  },
-  loginRedirect: {
-    marginTop: 24,
-    alignItems: 'center',
-  },
-  loginText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  loginLink: {
-    color: '#ee4d2d',
-    fontWeight: '600',
-  },
+
+  loginRedirect: { marginTop: 20, alignItems: 'center' },
+  loginText: { color: '#666', fontSize: 14 },
+  loginLink: { color: '#ee4d2d', fontWeight: '600' },
 });
 
 export default Register;

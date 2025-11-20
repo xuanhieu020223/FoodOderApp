@@ -4,12 +4,12 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { TouchableOpacity, StyleSheet, View, Text } from 'react-native';
 import type { StackNavigationOptions } from '@react-navigation/stack';
 import { useNavigation } from '@react-navigation/native';
-import ManageUsersScreen from '../screens/admin/ManageUsersScreen';
-import ManageFoodsScreen from '../screens/admin/ManageFoodsScreen';
-import ManageCategoriesScreen from '../screens/admin/ManageCategoriesScreen';
-import ManageOrdersScreen from '../screens/admin/ManageOrdersScreen';
-import StatisticsScreen from '../screens/admin/StatisticsScreen';
-import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
+import ManageUsersScreen from '../screens/customer/ManageUsersScreen';
+import ManageFoodsScreen from '../screens/customer/ManageFoodsScreen';
+import ManageCategoriesScreen from '../screens/customer/ManageCategoriesScreen';
+import ManageOrdersScreen from '../screens/customer/ManageOrdersScreen';
+import StatisticsScreen from '../screens/customer/StatisticsScreen';
+import AdminDashboardScreen from '../screens/customer/AdminDashboardScreen';
 
 type AdminStackParamList = {
   AdminDashboard: undefined;

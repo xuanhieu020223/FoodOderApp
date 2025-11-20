@@ -44,6 +44,8 @@ type Food = {
   category: string;
   imageUrl: string;
   isAvailable: boolean;
+  restaurantId?: string;
+  restaurantName?: string;
 };
 
 type Promotion = {
@@ -62,6 +64,16 @@ type SortOption = {
   id: string;
   label: string;
   value: (a: Food, b: Food) => number;
+};
+
+type Restaurant = {
+  id: string;
+  name: string;
+  address?: string;
+  image?: string;
+  rating?: number;
+  deliveryTime?: string;
+  tags?: string[];
 };
 
 const sortOptions: SortOption[] = [
@@ -99,12 +111,23 @@ const HomeScreen = () => {
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [foods, setFoods] = useState<Food[]>([]);
   const [filteredFoods, setFilteredFoods] = useState<Food[]>([]);
+  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [filteredRestaurants, setFilteredRestaurants] = useState<Restaurant[]>([]);
+  const [restaurantMap, setRestaurantMap] = useState<Record<string, Restaurant>>({});
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [cartItemCount, setCartItemCount] = useState(0);
   const [favorites, setFavorites] = useState<{ [key: string]: string }>({});
   const [showSortModal, setShowSortModal] = useState(false);
+
+  useEffect(() => {
+    const map: Record<string, Restaurant> = {};
+    restaurants.forEach((rest) => {
+      map[rest.id] = rest;
+    });
+    setRestaurantMap(map);
+  }, [restaurants]);
   const [selectedSort, setSelectedSort] = useState<string>('default');
 
   const loadCartItemCount = async () => {
@@ -170,28 +193,19 @@ const HomeScreen = () => {
   }, [navigation, cartItemCount]);
 
   useEffect(() => {
-    if (!foods) return;
-    
     const query = searchQuery.toLowerCase().trim();
     if (query === '') {
-      setFilteredFoods(foods);
+      setFilteredRestaurants([]);
       return;
     }
 
-    // Log for debugging
-    console.log('Search query:', query);
-    console.log('All foods:', foods);
-
-    const filtered = foods.filter(food => {
-      const nameMatch = food.name.toLowerCase().includes(query);
-      const descMatch = food.description.toLowerCase().includes(query);
-      return nameMatch || descMatch;
+    const restaurantMatches = restaurants.filter(rest => {
+      const nameMatch = rest.name?.toLowerCase().includes(query);
+      const addressMatch = rest.address?.toLowerCase().includes(query);
+      return nameMatch || addressMatch;
     });
-
-    // Log filtered results
-    console.log('Filtered foods:', filtered);
-    setFilteredFoods(filtered);
-  }, [searchQuery, foods, selectedCategory]);
+    setFilteredRestaurants(restaurantMatches);
+  }, [searchQuery, restaurants]);
 
   useEffect(() => {
     if (!foods) return;
@@ -204,13 +218,16 @@ const HomeScreen = () => {
       setFilteredFoods(sortedFoods);
     } else {
       const query = searchQuery.toLowerCase().trim();
-      const filtered = sortedFoods.filter(food => 
-        food.name.toLowerCase().includes(query) || 
-        food.description.toLowerCase().includes(query)
-      );
+      const filtered = sortedFoods.filter(food => {
+        const nameMatch = food.name.toLowerCase().includes(query);
+        const descMatch = food.description.toLowerCase().includes(query);
+        const restaurantName = food.restaurantId ? restaurantMap[food.restaurantId]?.name : undefined;
+        const restaurantMatch = restaurantName?.toLowerCase().includes(query);
+        return nameMatch || descMatch || restaurantMatch;
+      });
       setFilteredFoods(filtered);
     }
-  }, [searchQuery, foods, selectedSort]);
+  }, [searchQuery, foods, selectedSort, restaurantMap]);
 
   const handleSearch = (text: string) => {
     setSearchQuery(text);
@@ -272,6 +289,13 @@ const HomeScreen = () => {
         } as Promotion);
       });
       setPromotions(promotionsData);
+
+      const restaurantsSnapshot = await getDocs(collection(db, 'restaurants'));
+      const restaurantsData: Restaurant[] = [];
+      restaurantsSnapshot.forEach((doc) => {
+        restaurantsData.push({ id: doc.id, ...doc.data() } as Restaurant);
+      });
+      setRestaurants(restaurantsData);
 
       setLoading(false);
     } catch (error) {
@@ -391,6 +415,28 @@ const HomeScreen = () => {
     </TouchableOpacity>
   );
 
+  const renderRestaurantCard = ({ item }: { item: Restaurant }) => (
+    <TouchableOpacity
+      style={styles.restaurantCard}
+      onPress={() => navigation.navigate('RestaurantDetail', { restaurantId: item.id })}
+    >
+      <Image
+        source={{ uri: item.image || 'https://cdn-icons-png.flaticon.com/512/3595/3595455.png' }}
+        style={styles.restaurantCardImage}
+      />
+      <Text style={styles.restaurantCardName} numberOfLines={1}>
+        {item.name}
+      </Text>
+      <Text style={styles.restaurantCardMeta} numberOfLines={1}>
+        {item.rating ? `${item.rating.toFixed(1)} ★ · ` : ''}
+        {item.deliveryTime || '20-30 phút'}
+      </Text>
+      <Text style={styles.restaurantCardAddress} numberOfLines={1}>
+        {item.address}
+      </Text>
+    </TouchableOpacity>
+  );
+
   const renderFoodItem = ({ item }: { item: Food }) => (
     <TouchableOpacity 
       style={styles.foodItem}
@@ -419,6 +465,11 @@ const HomeScreen = () => {
       </View>
       <View style={styles.foodInfo}>
         <Text style={styles.foodName} numberOfLines={1}>{item.name}</Text>
+        {item.restaurantId && (
+          <Text style={styles.foodRestaurant} numberOfLines={1}>
+            {restaurantMap[item.restaurantId]?.name || 'Đối tác FoodOrder'}
+          </Text>
+        )}
         <Text style={styles.foodDescription} numberOfLines={2}>
           {item.description}
         </Text>
@@ -499,6 +550,12 @@ const HomeScreen = () => {
     );
   }
 
+  const quickFilterOptions = [
+    { label: 'Giao nhanh', icon: 'flash' as keyof typeof Ionicons.glyphMap },
+    { label: 'Ưu đãi 50%', icon: 'pricetag' as keyof typeof Ionicons.glyphMap },
+    { label: 'Mua 1 tặng 1', icon: 'gift' as keyof typeof Ionicons.glyphMap },
+  ];
+
   return (
     <SafeAreaView style={styles.container}>
       {renderSortModal()}
@@ -512,17 +569,17 @@ const HomeScreen = () => {
           <View style={styles.searchContainer}>
             <Ionicons name="search" size={24} color="#999" style={styles.searchIcon} />
             <TextInput 
-              placeholder="Tìm kiếm món ăn..." 
+              placeholder="Tìm kiếm món ăn, nhà hàng..." 
               style={styles.searchInput}
               value={searchQuery}
-              onChangeText={setSearchQuery}
+              onChangeText={handleSearch}
               returnKeyType="search"
               clearButtonMode="while-editing"
             />
             {searchQuery.length > 0 && (
               <TouchableOpacity
                 style={styles.clearButton}
-                onPress={() => setSearchQuery('')}
+                onPress={() => handleSearch('')}
               >
                 <Ionicons name="close-circle" size={20} color="#999" />
               </TouchableOpacity>
@@ -544,6 +601,79 @@ const HomeScreen = () => {
         </View>
 
         {!searchQuery && (
+          <View style={styles.quickFilters}>
+            {quickFilterOptions.map((option) => (
+              <TouchableOpacity key={option.label} style={styles.quickFilterButton}>
+                <Ionicons name={option.icon} size={16} color="#ee4d2d" />
+                <Text style={styles.quickFilterText}>{option.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+        {searchQuery ? (
+          <View style={styles.searchResultsContainer}>
+            <Text style={styles.sectionTitle}>
+              Món ăn phù hợp ({filteredFoods.length})
+            </Text>
+            {filteredFoods.length === 0 ? (
+              <Text style={styles.emptyText}>Không tìm thấy món ăn phù hợp</Text>
+            ) : (
+              filteredFoods.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.searchRow}
+                  onPress={() => navigation.navigate('FoodDetail', { foodId: item.id })}
+                >
+                  <Image source={{ uri: item.imageUrl }} style={styles.searchRowImage} />
+                  <View style={styles.searchRowInfo}>
+                    <Text style={styles.searchRowTitle}>{item.name}</Text>
+                    <Text style={styles.searchRowMeta}>
+                      {restaurantMap[item.restaurantId || '']?.name || 'Đối tác FoodOrder'}
+                    </Text>
+                    <Text style={styles.searchRowPrice}>
+                      {item.price.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' })}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color="#ee4d2d" />
+                </TouchableOpacity>
+              ))
+            )}
+
+            <Text style={[styles.sectionTitle, { marginTop: 24 }]}>
+              Nhà hàng ({filteredRestaurants.length})
+            </Text>
+            {filteredRestaurants.length === 0 ? (
+              <Text style={styles.emptyText}>Không tìm thấy nhà hàng phù hợp</Text>
+            ) : (
+              filteredRestaurants.map((restaurantItem) => (
+                <TouchableOpacity
+                  key={restaurantItem.id}
+                  style={styles.searchRow}
+                  onPress={() =>
+                    navigation.navigate('RestaurantDetail', { restaurantId: restaurantItem.id })
+                  }
+                >
+                  <Image
+                    source={{
+                      uri: restaurantItem.image || 'https://cdn-icons-png.flaticon.com/512/3595/3595455.png',
+                    }}
+                    style={styles.searchRowImage}
+                  />
+                  <View style={styles.searchRowInfo}>
+                    <Text style={styles.searchRowTitle}>{restaurantItem.name}</Text>
+                    <Text style={styles.searchRowMeta} numberOfLines={1}>
+                      {restaurantItem.address}
+                    </Text>
+                    <Text style={styles.searchRowPrice}>
+                      {restaurantItem.rating ? `${restaurantItem.rating.toFixed(1)} ★` : 'Đối tác FoodOrder'}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color="#ee4d2d" />
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+        ) : (
           <>
             <Text style={styles.sectionTitle}>Danh mục</Text>
             <FlatList
@@ -557,61 +687,75 @@ const HomeScreen = () => {
                 <Text style={styles.emptyText}>Không có danh mục nào</Text>
               )}
             />
-          </>
-        )}
 
-        {!searchQuery && promotions.length > 0 && (
-          <>
-            <Text style={styles.sectionTitle}>Ưu đãi hôm nay</Text>
-            <FlatList
-              data={promotions}
-              renderItem={renderPromotion}
-              keyExtractor={item => item.id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.promotionsContainer}
-            />
-          </>
-        )}
+            {promotions.length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>Ưu đãi hôm nay</Text>
+                <FlatList
+                  data={promotions}
+                  renderItem={renderPromotion}
+                  keyExtractor={item => item.id}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.promotionsContainer}
+                />
+              </>
+            )}
 
-        <View style={styles.foodsHeader}>
-          <Text style={styles.sectionTitle}>
-            {searchQuery 
-              ? `Kết quả tìm kiếm (${filteredFoods.length})`
-              : selectedCategory 
-                ? categories.find(c => c.id === selectedCategory)?.name || 'Món ăn'
-                : 'Tất cả món ăn'
-            }
-          </Text>
-          <TouchableOpacity 
-            style={styles.sortButton}
-            onPress={() => setShowSortModal(true)}
-          >
-            <Ionicons name="filter-outline" size={20} color="#666" />
-            <Text style={styles.sortButtonText}>
-              {sortOptions.find(opt => opt.id === selectedSort)?.label || 'Sắp xếp'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+            {restaurants.length > 0 && (
+              <>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionTitle}>Nhà hàng nổi bật</Text>
+                  <TouchableOpacity onPress={() => navigation.navigate('RestaurantList')}>
+                    <Text style={styles.linkText}>Xem tất cả</Text>
+                  </TouchableOpacity>
+                </View>
+                <FlatList
+                  data={restaurants.slice(0, 8)}
+                  horizontal
+                  keyExtractor={(item) => item.id}
+                  renderItem={renderRestaurantCard}
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.restaurantCarousel}
+                />
+              </>
+            )}
 
-        <View style={styles.foodsContainer}>
-          {filteredFoods.map((item) => (
-            <View key={item.id} style={styles.foodItemWrapper}>
-              {renderFoodItem({ item })}
-            </View>
-          ))}
-          {filteredFoods.length === 0 && (
-            <View style={styles.emptyContainer}>
-              <Ionicons name="search-outline" size={64} color="#ccc" />
-              <Text style={styles.emptyText}>
-                {searchQuery 
-                  ? 'Không tìm thấy món ăn phù hợp'
-                  : 'Không có món ăn nào'
+            <View style={styles.foodsHeader}>
+              <Text style={styles.sectionTitle}>
+                {selectedCategory 
+                  ? categories.find(c => c.id === selectedCategory)?.name || 'Món ăn'
+                  : 'Gợi ý cho bạn'
                 }
               </Text>
+              <TouchableOpacity 
+                style={styles.sortButton}
+                onPress={() => setShowSortModal(true)}
+              >
+                <Ionicons name="filter-outline" size={20} color="#666" />
+                <Text style={styles.sortButtonText}>
+                  {sortOptions.find(opt => opt.id === selectedSort)?.label || 'Sắp xếp'}
+                </Text>
+              </TouchableOpacity>
             </View>
-          )}
-        </View>
+
+            <View style={styles.foodsContainer}>
+              {filteredFoods.map((item) => (
+                <View key={item.id} style={styles.foodItemWrapper}>
+                  {renderFoodItem({ item })}
+                </View>
+              ))}
+              {filteredFoods.length === 0 && (
+                <View style={styles.emptyContainer}>
+                  <Ionicons name="search-outline" size={64} color="#ccc" />
+                  <Text style={styles.emptyText}>
+                    Không có món ăn nào
+                  </Text>
+                </View>
+              )}
+            </View>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -686,6 +830,29 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     paddingHorizontal: 4,
   },
+  quickFilters: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
+  quickFilterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#fee2e2',
+  },
+  quickFilterText: {
+    marginLeft: 6,
+    color: '#ee4d2d',
+    fontWeight: '600',
+    fontSize: 12,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
@@ -731,6 +898,44 @@ const styles = StyleSheet.create({
   promotionsContainer: {
     paddingHorizontal: 16,
     marginBottom: 24,
+  },
+  restaurantCarousel: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  restaurantCard: {
+    width: 160,
+    marginRight: 12,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+  },
+  restaurantCardImage: {
+    width: '100%',
+    height: 90,
+    borderRadius: 12,
+    marginBottom: 10,
+    backgroundColor: '#eee',
+  },
+  restaurantCardName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  restaurantCardMeta: {
+    fontSize: 12,
+    color: '#f97316',
+    marginTop: 4,
+  },
+  restaurantCardAddress: {
+    fontSize: 11,
+    color: '#6b7280',
+    marginTop: 2,
   },
   promotionItem: {
     width: width * 0.8,
@@ -798,6 +1003,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingRight: 16,
     marginBottom: 12,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginTop: 10,
+  },
+  linkText: {
+    color: '#ee4d2d',
+    fontSize: 14,
+    fontWeight: '600',
   },
   sortButton: {
     flexDirection: 'row',
@@ -881,6 +1098,11 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 4,
   },
+  foodRestaurant: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 4,
+  },
   foodDescription: {
     fontSize: 12,
     color: '#666',
@@ -918,6 +1140,49 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginTop: 8,
+  },
+  searchResultsContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 24,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 10,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  searchRowImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 10,
+    marginRight: 12,
+    backgroundColor: '#eee',
+  },
+  searchRowInfo: {
+    flex: 1,
+  },
+  searchRowTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  searchRowMeta: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginVertical: 2,
+  },
+  searchRowPrice: {
+    fontSize: 12,
+    color: '#ee4d2d',
+    fontWeight: '600',
   },
   badge: {
     position: 'absolute',

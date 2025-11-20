@@ -13,8 +13,8 @@ import {
   RefreshControl,
 } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { collection, query, getDocs, doc, updateDoc, where, orderBy } from 'firebase/firestore';
-import { db } from '../../config/Firebase';
+import { collection, query, getDocs, doc, updateDoc, where, orderBy, getDoc } from 'firebase/firestore';
+import { auth, db } from '../../config/Firebase';
 
 type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'shipping' | 'delivered' | 'cancelled';
 
@@ -28,6 +28,8 @@ type OrderItem = {
 
 type Order = {
   id: string;
+  restaurantId?: string;
+  restaurantName?: string;
   userId: string;
   customerName: string;
   customerPhone: string;
@@ -82,17 +84,47 @@ const ManageOrdersScreen = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>('all');
   const [assignShipperModalVisible, setAssignShipperModalVisible] = useState(false);
+  const [userRole, setUserRole] = useState<'admin' | 'restaurant' | 'staff'>('admin');
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    loadOrders();
-    loadShippers();
+    const init = async () => {
+      const user = auth.currentUser;
+      let resolvedRole: string | undefined;
+      if (user) {
+        setCurrentUserId(user.uid);
+        resolvedRole = await fetchUserRole(user.uid);
+      }
+      await loadOrders(user?.uid, resolvedRole);
+      loadShippers();
+    };
+    init();
   }, []);
 
-  const loadOrders = async () => {
+  const fetchUserRole = async (uid: string) => {
+    try {
+      const userDoc = await getDoc(doc(db, 'users', uid));
+      if (userDoc.exists()) {
+        const role = (userDoc.data().role || 'admin').toLowerCase();
+        setUserRole(role as any);
+        return role;
+      }
+    } catch (error) {
+      console.error('Error loading user role:', error);
+    }
+    return undefined;
+  };
+
+  const loadOrders = async (ownerIdOverride?: string, roleOverride?: string) => {
     try {
       setLoading(true);
       const ordersRef = collection(db, 'orders');
-      const q = query(ordersRef, orderBy('createdAt', 'desc'));
+      const roleToUse = roleOverride || userRole;
+      const ownerIdToUse = ownerIdOverride || currentUserId;
+      let q = query(ordersRef, orderBy('createdAt', 'desc'));
+      if (roleToUse === 'restaurant' && ownerIdToUse) {
+        q = query(ordersRef, where('restaurantId', '==', ownerIdToUse), orderBy('createdAt', 'desc'));
+      }
       const querySnapshot = await getDocs(q);
       
       const ordersData: Order[] = [];
@@ -103,6 +135,8 @@ const ManageOrdersScreen = () => {
         // Sửa lại cách lấy thông tin khách hàng
         ordersData.push({
           id: doc.id,
+          restaurantId: orderData.restaurantId || '',
+          restaurantName: orderData.restaurantName || 'Đối tác FoodOrder',
           userId: orderData.userId || '',
           customerName: orderData.fullName || orderData.customerName || 'Không có tên', // Thêm fullName
           customerPhone: orderData.phone || orderData.customerPhone || 'Không có SĐT', // Thêm phone

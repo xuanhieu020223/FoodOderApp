@@ -1,71 +1,84 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Image } from 'react-native';
+import { signOut } from 'firebase/auth';
 import { auth, db } from '../../config/Firebase';
 import { doc, getDoc } from 'firebase/firestore';
+import { Ionicons } from '@expo/vector-icons';
 
-const ShipperProfileScreen = () => {
-  const [profile, setProfile] = useState<any>(null);
+const ShipperProfileScreen = ({ navigation }: any) => {
+  const [userData, setUserData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const user = auth.currentUser;
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const user = auth.currentUser;
-        if (!user) return;
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) {
-          setProfile(userDoc.data());
-        }
-      } catch (e) {
-        Alert.alert('Lỗi', 'Không thể tải thông tin tài khoản');
-      }
-      setLoading(false);
-    };
-    fetchProfile();
+    fetchUser();
   }, []);
 
-  const handleChangePassword = () => {
-    Alert.alert('Đổi mật khẩu', 'Chức năng đổi mật khẩu sẽ được phát triển.');
+  const fetchUser = async () => {
+    setLoading(true);
+    try {
+      if (!user?.uid) {
+        setUserData(null);
+        setLoading(false);
+        return;
+      }
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      setUserData(userDoc.data());
+    } catch (e) {
+      setUserData(null);
+    }
+    setLoading(false);
   };
-  const handleLogout = () => {
-    Alert.alert('Đăng xuất', 'Bạn đã đăng xuất thành công.');
-    // TODO: Thực hiện điều hướng về màn hình đăng nhập
+
+  const handleLogout = async () => {
+    Alert.alert('Đăng xuất', 'Bạn có chắc chắn muốn đăng xuất?', [
+      { text: 'Hủy', style: 'cancel' },
+      {
+        text: 'Đăng xuất',
+        style: 'destructive',
+        onPress: async () => {
+          await signOut(auth);
+          navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+        },
+      },
+    ]);
   };
 
   if (loading) return <ActivityIndicator style={{ marginTop: 40 }} size="large" color="#ee4d2d" />;
-  if (!profile) return <Text style={{ marginTop: 40, textAlign: 'center' }}>Không có dữ liệu tài khoản</Text>;
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Thông tin tài khoản</Text>
-      <View style={styles.infoBox}>
-        <Text style={styles.label}>Họ tên:</Text>
-        <Text style={styles.value}>{profile.name}</Text>
-        <Text style={styles.label}>Số điện thoại:</Text>
-        <Text style={styles.value}>{profile.phone}</Text>
-        <Text style={styles.label}>Email:</Text>
-        <Text style={styles.value}>{profile.email}</Text>
-        <Text style={styles.label}>Phương tiện:</Text>
-        <Text style={styles.value}>{profile.vehicle || 'Chưa cập nhật'}</Text>
+      <View style={styles.avatarBox}>
+        <Ionicons name="person-circle" size={90} color="#ee4d2d" />
+        <Text style={styles.name}>{userData?.name || 'Shipper'}</Text>
+        <Text style={styles.email}>{user?.email}</Text>
       </View>
-      <TouchableOpacity style={styles.button} onPress={handleChangePassword}>
-        <Text style={styles.buttonText}>Đổi mật khẩu</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={[styles.button, { backgroundColor: '#b71c1c' }]} onPress={handleLogout}>
-        <Text style={styles.buttonText}>Đăng xuất</Text>
+      <View style={styles.infoBox}>
+        <Ionicons name="call" size={18} color="#ee4d2d" />
+        <Text style={styles.infoText}>{userData?.phone || 'Chưa cập nhật'}</Text>
+      </View>
+      <View style={styles.infoBox}>
+        <Ionicons name="location" size={18} color="#ee4d2d" />
+        <Text style={styles.infoText}>{userData?.address || 'Chưa cập nhật'}</Text>
+      </View>
+      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+        <Ionicons name="log-out-outline" size={20} color="#fff" />
+        <Text style={styles.logoutText}>Đăng xuất</Text>
       </TouchableOpacity>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', padding: 16, backgroundColor: '#fff' },
-  header: { fontSize: 20, fontWeight: 'bold', marginTop: 16 },
-  infoBox: { backgroundColor: '#f9fbe7', borderRadius: 10, padding: 16, marginVertical: 16, width: '100%' },
-  label: { fontWeight: 'bold', marginTop: 8 },
-  value: { marginBottom: 4 },
-  button: { backgroundColor: '#1976d2', padding: 12, borderRadius: 8, marginVertical: 8, minWidth: 180 },
-  buttonText: { color: '#fff', fontWeight: 'bold', textAlign: 'center' },
+  container: { flex: 1, backgroundColor: '#fff', alignItems: 'center', padding: 24 },
+  avatarBox: { alignItems: 'center', marginBottom: 24 },
+  avatar: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#eee' },
+  name: { fontSize: 20, fontWeight: 'bold', marginTop: 12 },
+  email: { fontSize: 14, color: '#888', marginTop: 4 },
+  infoBox: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, backgroundColor: '#fff7f3', borderRadius: 8, padding: 10, width: '100%' },
+  infoText: { fontSize: 15, marginLeft: 8, color: '#222' },
+  logoutBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ee4d2d', padding: 12, borderRadius: 8, marginTop: 32 },
+  logoutText: { color: '#fff', fontWeight: 'bold', marginLeft: 8, fontSize: 16 },
 });
 
 export default ShipperProfileScreen;

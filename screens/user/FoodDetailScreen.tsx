@@ -29,6 +29,8 @@ type Food = {
   category: string;
   imageUrl: string;
   isAvailable: boolean;
+  restaurantId?: string;
+  restaurantName?: string;
 };
 
 type CartItem = {
@@ -37,6 +39,9 @@ type CartItem = {
   price: number;
   name: string;
   imageUrl: string;
+  restaurantId?: string;
+  restaurantName?: string;
+  restaurantImage?: string;
   userId: string;
   createdAt: Date;
 };
@@ -54,6 +59,7 @@ const FoodDetailScreen = () => {
   const [addingToCart, setAddingToCart] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
   const [favoriteId, setFavoriteId] = useState<string | null>(null);
+  const [restaurant, setRestaurant] = useState<any | null>(null);
 
   useEffect(() => {
     loadFoodDetails();
@@ -64,7 +70,18 @@ const FoodDetailScreen = () => {
     try {
       const foodDoc = await getDoc(doc(db, 'foods', foodId));
       if (foodDoc.exists()) {
-        setFood({ id: foodDoc.id, ...foodDoc.data() } as Food);
+        const data = { id: foodDoc.id, ...foodDoc.data() } as Food;
+        setFood(data);
+        if (data.restaurantId) {
+          const restaurantDoc = await getDoc(doc(db, 'restaurants', data.restaurantId));
+          if (restaurantDoc.exists()) {
+            setRestaurant({ id: restaurantDoc.id, ...restaurantDoc.data() });
+          } else {
+            setRestaurant(null);
+          }
+        } else {
+          setRestaurant(null);
+        }
       }
       setLoading(false);
     } catch (error) {
@@ -219,6 +236,9 @@ const FoodDetailScreen = () => {
         price: food.price,
         name: food.name,
         imageUrl: food.imageUrl,
+        restaurantId: food.restaurantId || restaurant?.id,
+        restaurantName: food.restaurantName || restaurant?.name,
+        restaurantImage: restaurant?.image || food.imageUrl,
         userId: user.uid,
         createdAt: new Date(),
       };
@@ -281,6 +301,9 @@ const FoodDetailScreen = () => {
         price: food.price,
         name: food.name,
         imageUrl: food.imageUrl,
+        restaurantId: food.restaurantId || restaurant?.id,
+        restaurantName: food.restaurantName || restaurant?.name,
+        restaurantImage: restaurant?.image || food.imageUrl,
         userId: user.uid,
         createdAt: new Date(),
       };
@@ -343,6 +366,34 @@ const FoodDetailScreen = () => {
           
           <Text style={styles.descriptionTitle}>Mô tả</Text>
           <Text style={styles.description}>{food.description}</Text>
+
+          {restaurant && (
+            <View style={styles.restaurantCard}>
+              <Image
+                source={{ uri: restaurant.image || food.imageUrl }}
+                style={styles.restaurantImage}
+              />
+              <View style={styles.restaurantInfo}>
+                <Text style={styles.restaurantName}>{restaurant.name}</Text>
+                <Text style={styles.restaurantAddress}>{restaurant.address}</Text>
+                <View style={styles.restaurantMeta}>
+                  <Ionicons name="star" size={16} color="#fbbf24" />
+                  <Text style={styles.restaurantMetaText}>
+                    {restaurant.rating ? `${restaurant.rating.toFixed(1)} · ` : ''}
+                    {restaurant.deliveryTime || '20-30 phút'}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.viewRestaurantButton}
+                  onPress={() =>
+                    navigation.navigate('RestaurantDetail', { restaurantId: restaurant.id })
+                  }
+                >
+                  <Text style={styles.viewRestaurantButtonText}>Xem nhà hàng</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           <View style={styles.quantityContainer}>
             <Text style={styles.quantityLabel}>Số lượng:</Text>
@@ -449,6 +500,57 @@ const styles = StyleSheet.create({
     color: '#666',
     lineHeight: 24,
     marginBottom: 24,
+  },
+  restaurantCard: {
+    flexDirection: 'row',
+    backgroundColor: '#fff7f3',
+    padding: 14,
+    borderRadius: 16,
+    marginBottom: 24,
+    alignItems: 'center',
+  },
+  restaurantImage: {
+    width: 72,
+    height: 72,
+    borderRadius: 16,
+    marginRight: 12,
+    backgroundColor: '#eee',
+  },
+  restaurantInfo: {
+    flex: 1,
+  },
+  restaurantName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  restaurantAddress: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginVertical: 4,
+  },
+  restaurantMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  restaurantMetaText: {
+    marginLeft: 4,
+    fontSize: 12,
+    color: '#4b5563',
+  },
+  viewRestaurantButton: {
+    borderWidth: 1,
+    borderColor: '#ee4d2d',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    alignSelf: 'flex-start',
+  },
+  viewRestaurantButtonText: {
+    color: '#ee4d2d',
+    fontWeight: '600',
+    fontSize: 12,
   },
   quantityContainer: {
     flexDirection: 'row',

@@ -20,6 +20,8 @@ import VouchersScreen from '../screens/user/VouchersScreen';
 import FavoritesScreen from '../screens/user/FavoritesScreen';
 import SettingsScreen from '../screens/user/SettingsScreen';
 import HelpScreen from '../screens/user/HelpScreen';
+import RestaurantListScreen from '../screens/user/RestaurantListScreen';
+import RestaurantDetailScreen from '../screens/user/RestaurantDetailScreen';
 
 export type TabParamList = {
   Home: undefined;
@@ -32,6 +34,8 @@ export type TabParamList = {
 export type UserStackParamList = {
   TabNavigator: NavigatorScreenParams<TabParamList>;
   FoodDetail: { foodId: string };
+  RestaurantDetail: { restaurantId: string };
+  RestaurantList: undefined;
   Cart: undefined;
   Checkout: { selectedItems: string[] };
   Login: undefined;
@@ -69,6 +73,8 @@ const TabNavigator = () => {
             iconName = focused ? 'heart' : 'heart-outline';
           } else if (route.name === 'Profile') {
             iconName = focused ? 'person' : 'person-outline';
+          } else if (route.name === 'Restaurants') {
+            iconName = focused ? 'restaurant' : 'restaurant-outline';
           }
 
           return <Ionicons name={iconName} size={size} color={color} />;
@@ -133,6 +139,16 @@ const UserNavigator = () => {
         name="FoodDetail"
         component={FoodDetailScreen}
         options={{ title: 'Chi tiết món ăn' }}
+      />
+      <Stack.Screen
+        name="RestaurantDetail"
+        component={RestaurantDetailScreen}
+        options={{ title: 'Nhà hàng' }}
+      />
+      <Stack.Screen
+        name="RestaurantList"
+        component={RestaurantListScreen}
+        options={{ title: 'Danh sách nhà hàng' }}
       />
       <Stack.Screen
         name="Cart"

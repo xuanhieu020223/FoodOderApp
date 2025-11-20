@@ -16,6 +16,8 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../../config/Firebase';
 import * as ImagePicker from 'expo-image-picker';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { seedVouchers } from '../../utils/seedVouchers';
+
 
 const AccountInfoScreen = () => {
   const navigation = useNavigation();
@@ -32,7 +34,9 @@ const AccountInfoScreen = () => {
   useEffect(() => {
     loadUserData();
   }, []);
-
+useEffect(() => {
+  seedVouchers();
+}, []);
   const loadUserData = async () => {
     try {
       const user = auth.currentUser;

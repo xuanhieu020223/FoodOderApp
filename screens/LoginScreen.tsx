@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -13,21 +13,31 @@ import {
 } from 'react-native';
 import { Ionicons, Feather, AntDesign } from '@expo/vector-icons';
 import Animated, { FadeInUp } from 'react-native-reanimated';
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { CommonActions } from '@react-navigation/native';
+import { useNavigation, useRoute, CommonActions } from '@react-navigation/native';
+import type { RouteProp } from '@react-navigation/native';
 import { auth, db } from '../config/Firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { collection, query, where, getDocs, getDoc, doc } from 'firebase/firestore';
 import { RootStackParamList } from '../app';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+type LoginRouteProp = RouteProp<RootStackParamList, 'Login'>;
+type LoginMode = 'customer' | 'restaurant' | 'shipper' | 'admin';
 
 const LogIn = () => {
   const navigation = useNavigation<NavigationProp>();
+  const route = useRoute<LoginRouteProp>();
+  const initialMode = route.params?.mode ?? 'customer';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [secureText, setSecureText] = useState(true);
+  const [mode, setMode] = useState<LoginMode>(initialMode);
+
+  useEffect(() => {
+    if (route.params?.mode) {
+      setMode(route.params.mode);
+    }
+  }, [route.params?.mode]);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -45,16 +55,39 @@ const LogIn = () => {
       }
 
       const userData = userDoc.data();
-      
+      const userRole = (userData.role || 'customer').toLowerCase();
+
+      if (mode === 'restaurant' && userRole !== 'restaurant') {
+        Alert.alert('Thông báo', 'Tài khoản này không thuộc loại Nhà hàng. Vui lòng đăng nhập với tư cách khách hàng.');
+        return;
+      }
+
+      if (mode === 'customer' && userRole === 'restaurant') {
+        Alert.alert('Thông báo', 'Tài khoản này thuộc nhà hàng. Vui lòng chọn đăng nhập Nhà hàng.');
+        return;
+      }
+
+      if (mode === 'shipper' && userRole !== 'shipper') {
+        Alert.alert('Thông báo', 'Tài khoản này không phải shipper.');
+        return;
+      }
+
       // Kiểm tra role và điều hướng
-      if (userData.role === 'admin') {
+      if (userRole === 'admin') {
         navigation.dispatch(
           CommonActions.reset({
             index: 0,
             routes: [{ name: 'AdminApp' }],
           })
         );
-      } else if (userData.role === 'shipper') {
+      } else if (userRole === 'restaurant') {
+        navigation.dispatch(
+          CommonActions.reset({
+            index: 0,
+            routes: [{ name: 'RestaurantApp' }],
+          })
+        );
+      } else if (userRole === 'shipper') {
         navigation.dispatch(
           CommonActions.reset({
             index: 0,
@@ -102,7 +135,38 @@ const LogIn = () => {
           />
         </View>
         
-        <Text style={styles.titleText}>Đăng Nhập</Text>
+        <Text style={styles.titleText}>
+          {mode === 'restaurant'
+            ? 'Đăng nhập Nhà hàng'
+            : mode === 'shipper'
+              ? 'Đăng nhập Shipper'
+              : 'Đăng Nhập'}
+        </Text>
+        <View style={styles.modeSwitcher}>
+          {[
+            { label: 'Khách hàng', value: 'customer' },
+            { label: 'Nhà hàng', value: 'restaurant' },
+            { label: 'Shipper', value: 'shipper' },
+          ].map((option) => (
+            <TouchableOpacity
+              key={option.value}
+              style={[
+                styles.modeButton,
+                mode === option.value && styles.modeButtonActive,
+              ]}
+              onPress={() => setMode(option.value as LoginMode)}
+            >
+              <Text
+                style={[
+                  styles.modeButtonText,
+                  mode === option.value && styles.modeButtonTextActive,
+                ]}
+              >
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
         <View style={styles.formContainer}>
           <View style={styles.inputContainer}>
@@ -195,6 +259,36 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 32,
     textAlign: 'center',
+  },
+  modeSwitcher: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: '#f3f4f6',
+    borderRadius: 999,
+    padding: 4,
+    marginBottom: 24,
+  },
+  modeButton: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 999,
+    alignItems: 'center',
+  },
+  modeButtonActive: {
+    backgroundColor: '#fff',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
+  modeButtonText: {
+    fontSize: 14,
+    color: '#6b7280',
+    fontWeight: '600',
+  },
+  modeButtonTextActive: {
+    color: '#ee4d2d',
   },
   
   welcomeText: {

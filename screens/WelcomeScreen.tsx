@@ -49,6 +49,13 @@ const WelcomeScreen = () => {
           </TouchableOpacity>
 
           <TouchableOpacity
+            style={styles.merchantButton}
+            onPress={() => navigation.navigate('Login', { mode: 'restaurant' })}
+          >
+            <Text style={styles.merchantButtonText}>Dành cho nhà hàng</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={styles.registerButton}
             onPress={() => navigation.navigate('Register')}
           >
@@ -122,6 +129,20 @@ const styles = StyleSheet.create({
   loginButtonText: {
     color: '#fff',
     fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  merchantButton: {
+    backgroundColor: '#fff7f3',
+    paddingVertical: 14,
+    borderRadius: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#ffd4c4',
+  },
+  merchantButtonText: {
+    color: '#ee4d2d',
+    fontSize: 15,
     fontWeight: '600',
     textAlign: 'center',
   },

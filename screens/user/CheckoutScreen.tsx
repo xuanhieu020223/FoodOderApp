@@ -30,6 +30,9 @@ type CartItem = {
   price: number;
   name: string;
   imageUrl: string;
+  restaurantId?: string;
+  restaurantName?: string;
+  restaurantImage?: string;
   userId: string;
   createdAt: Date;
 };
@@ -210,30 +213,45 @@ const CheckoutScreen = () => {
         return;
       }
 
-      // Create order in Firestore
-      const ordersRef = collection(db, 'orders');
-      const order = {
-        userId: user.uid,
-        items: cartItems.map(item => ({
-          foodId: item.foodId,
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity,
-          imageUrl: item.imageUrl,
-        })),
-        customerName: orderDetails.fullName,
-        customerPhone: orderDetails.phone,
-        address: orderDetails.address,
-        subtotal: calculateSubTotal(),
-        deliveryFee: DELIVERY_FEE,
-        totalAmount: calculateTotal(),
-        status: 'pending',
-        note: orderDetails.note,
-        paymentMethod: orderDetails.paymentMethod,
-        createdAt: new Date(),
-      };
+      // Group cart items by restaurant
+      const groupedItems = cartItems.reduce<Record<string, CartItem[]>>((acc, item) => {
+        const key = item.restaurantId || 'marketplace';
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(item);
+        return acc;
+      }, {});
 
-      await addDoc(ordersRef, order);
+      const ordersRef = collection(db, 'orders');
+
+      for (const [restaurantId, items] of Object.entries(groupedItems)) {
+        const restaurantSubtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        const orderPayload = {
+          userId: user.uid,
+          restaurantId: restaurantId === 'marketplace' ? null : restaurantId,
+          restaurantName: items[0].restaurantName || 'Đối tác FoodOrder',
+          restaurantImage: items[0].restaurantImage || items[0].imageUrl,
+          items: items.map(item => ({
+            foodId: item.foodId,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+            imageUrl: item.imageUrl,
+            restaurantId: item.restaurantId,
+          })),
+          customerName: orderDetails.fullName,
+          customerPhone: orderDetails.phone,
+          address: orderDetails.address,
+          subtotal: restaurantSubtotal,
+          deliveryFee: DELIVERY_FEE,
+          totalAmount: restaurantSubtotal + DELIVERY_FEE,
+          status: 'pending',
+          note: orderDetails.note,
+          paymentMethod: orderDetails.paymentMethod,
+          createdAt: new Date(),
+        };
+
+        await addDoc(ordersRef, orderPayload);
+      }
 
       // Delete ordered items from cart
       const batch = writeBatch(db);

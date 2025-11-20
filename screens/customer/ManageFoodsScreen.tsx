@@ -18,8 +18,8 @@ import {
 } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { collection, query, getDocs, doc, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '../../config/Firebase';
+import { collection, query, getDocs, doc, addDoc, updateDoc, deleteDoc, where, getDoc } from 'firebase/firestore';
+import { auth, db } from '../../config/Firebase';
 
 // Cloudinary configuration
 const CLOUDINARY_URL = 'https://api.cloudinary.com/v1_1/dsbhlgu9c/upload';
@@ -352,11 +352,48 @@ const ManageFoodsScreen = () => {
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState('');
+  const [userRole, setUserRole] = useState<'admin' | 'restaurant' | 'customer'>('admin');
+  const [restaurantInfo, setRestaurantInfo] = useState<{ id: string; name: string; image?: string } | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    loadFoods();
-    loadCategories();
+    const init = async () => {
+      const user = auth.currentUser;
+      let resolvedRole: string | undefined;
+      if (user) {
+        setCurrentUserId(user.uid);
+        resolvedRole = await fetchUserProfile(user.uid);
+      }
+      await loadFoods(user?.uid, resolvedRole);
+      loadCategories();
+    };
+    init();
   }, []);
+
+  const fetchUserProfile = async (uid: string) => {
+    try {
+      const userDoc = await getDoc(doc(db, 'users', uid));
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        const role = (data.role || 'restaurant').toLowerCase();
+        setUserRole(role as any);
+        if (role === 'restaurant') {
+          const restaurantDoc = await getDoc(doc(db, 'restaurants', uid));
+          if (restaurantDoc.exists()) {
+            setRestaurantInfo({
+              id: restaurantDoc.id,
+              name: restaurantDoc.data().name,
+              image: restaurantDoc.data().image,
+            });
+          }
+        }
+        return role;
+      }
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+    }
+    return undefined;
+  };
 
   useEffect(() => {
     if (searchQuery.trim() === '') {
@@ -372,11 +409,18 @@ const ManageFoodsScreen = () => {
     }
   }, [searchQuery, foods]);
 
-  const loadFoods = async () => {
+  const loadFoods = async (ownerIdOverride?: string, roleOverride?: string) => {
     try {
       const foodsRef = collection(db, 'foods');
-      const q = query(foodsRef);
-      const querySnapshot = await getDocs(q);
+      const roleToUse = roleOverride || userRole;
+      const ownerIdToUse = ownerIdOverride || currentUserId;
+
+      let foodsQuery = query(foodsRef);
+      if (roleToUse === 'restaurant' && ownerIdToUse) {
+        foodsQuery = query(foodsRef, where('restaurantId', '==', ownerIdToUse));
+      }
+
+      const querySnapshot = await getDocs(foodsQuery);
       
       const foodsData: Food[] = [];
       querySnapshot.forEach((doc) => {
@@ -473,6 +517,12 @@ const ManageFoodsScreen = () => {
         return;
       }
 
+      const ownerId = currentUserId || auth.currentUser?.uid || 'global';
+      if (userRole === 'restaurant' && !restaurantInfo) {
+        Alert.alert('Lỗi', 'Không tìm thấy thông tin nhà hàng. Vui lòng thử lại.');
+        return;
+      }
+
       // Show loading indicator
       setLoading(true);
 
@@ -501,6 +551,10 @@ const ManageFoodsScreen = () => {
         imageUrl,
         isAvailable: true,
         updatedAt: new Date().toISOString(),
+        ownerId,
+        restaurantId: restaurantInfo?.id || ownerId,
+        restaurantName: restaurantInfo?.name || 'Đối tác FoodOrder',
+        restaurantImage: restaurantInfo?.image || imageUrl,
       };
 
       if (editingFood) {

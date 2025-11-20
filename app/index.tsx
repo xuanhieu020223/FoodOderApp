@@ -16,11 +16,12 @@ import ShipperNavigator from '../navigation/ShipperNavigator';
 // Define navigation types
 export type RootStackParamList = {
   Welcome: undefined;
-  Login: { isAdmin?: boolean };
+  Login: { mode?: 'customer' | 'restaurant' | 'shipper' | 'admin' } | undefined;
   Register: undefined;
   ResetPassword: undefined;
   UserApp: undefined;
   AdminApp: NavigatorScreenParams<AdminStackParamList>;
+  RestaurantApp: NavigatorScreenParams<AdminStackParamList>;
   ShipperApp: undefined;
 };
 
@@ -65,6 +66,11 @@ const AppNavigator = () => {
       />
       <Stack.Screen
         name="AdminApp"
+        component={AdminNavigator}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="RestaurantApp"
         component={AdminNavigator}
         options={{ headerShown: false }}
       />
