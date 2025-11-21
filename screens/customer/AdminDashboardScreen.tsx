@@ -199,22 +199,38 @@ const AdminDashboardScreen = () => {
           color="#FF9800"
         />
         
+        <MenuItem
+          title="Quản lý khuyến mãi"
+          icon="campaign"
+          screen="ManagePromotions"
+          description="Tạo & điều phối voucher toàn hệ thống"
+          color="#AB47BC"
+        />
+        
         {userRole === 'admin' && (
           <MenuItem
             title="Quản lý người dùng"
             icon="people"
             screen="ManageUsers"
-            description="Quản lý tài khoản khách hàng"
+            description="Khách hàng • nhà hàng • tài xế"
             color="#9C27B0"
           />
         )}
         
         <MenuItem
-          title="Thống kê doanh thu"
+          title="Báo cáo & phân tích"
           icon="bar-chart"
           screen="Statistics"
-          description="Xem báo cáo và phân tích"
+          description="Doanh thu • hiệu suất giao hàng"
           color="#607D8B"
+        />
+
+        <MenuItem
+          title="Hỗ trợ & khiếu nại"
+          icon="support-agent"
+          screen="SupportCenter"
+          description="Theo dõi ticket và phản hồi nhanh"
+          color="#00ACC1"
         />
       </ScrollView>
     </View>

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Bar,
   BarChart,
@@ -10,18 +11,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '../firebase';
+import type { OrderDoc } from '../services/orderService';
+import { fetchAllOrders } from '../services/orderService';
 
 const pieColors = ['#ee4d2d', '#ff9f68', '#ffd4c4', '#94a3b8'];
-
-type OrderDoc = {
-  id: string;
-  totalAmount?: number;
-  status?: string;
-  address?: string;
-  createdAt?: any;
-};
 
 const detectCity = (address?: string) => {
   if (!address) return 'Khác';
@@ -33,28 +26,15 @@ const detectCity = (address?: string) => {
 };
 
 const Reports = () => {
-  const [orders, setOrders] = useState<OrderDoc[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchOrders = async () => {
-      try {
-        const snap = await getDocs(collection(db, 'orders'));
-        setOrders(
-          snap.docs.map((docSnap) => ({
-            ...(docSnap.data() as OrderDoc),
-            id: docSnap.id,
-          })),
-        );
-      } catch (err) {
-        console.error('Error loading reports data', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchOrders();
-  }, []);
+  const {
+    data: orders = [],
+    isLoading,
+    error,
+  } = useQuery<OrderDoc[]>({
+    queryKey: ['orders', 'all'],
+    queryFn: fetchAllOrders,
+    staleTime: 1000 * 60,
+  });
 
   const revenueByCity = useMemo(() => {
     const cityMap = new Map<string, { revenue: number; orders: number }>();
@@ -130,8 +110,10 @@ const Reports = () => {
               <option>Tất cả thời gian</option>
             </select>
           </div>
-          {loading ? (
+          {isLoading ? (
             <div className="panel__empty">Đang tải dữ liệu...</div>
+          ) : error ? (
+            <div className="panel__empty error">Không thể tải dữ liệu báo cáo.</div>
           ) : (
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={revenueByCity} barSize={32}>
@@ -154,8 +136,10 @@ const Reports = () => {
               Tổng đơn: {orders.length.toLocaleString('vi-VN')}
             </span>
           </div>
-          {loading ? (
+          {isLoading ? (
             <div className="panel__empty">Đang tải dữ liệu...</div>
+          ) : error ? (
+            <div className="panel__empty error">Không thể tải dữ liệu báo cáo.</div>
           ) : (
             <>
               <ResponsiveContainer width="100%" height={300}>

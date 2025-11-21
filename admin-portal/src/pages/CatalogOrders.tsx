@@ -1,57 +1,41 @@
-import { useEffect, useState } from 'react';
-import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore';
+import { useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import StatusBadge from '../components/StatusBadge';
-import { db } from '../firebase';
-
-interface CategoryDoc {
-  id: string;
-  name?: string;
-  icon?: string;
-  priority?: number;
-}
-
-interface OrderDoc {
-  id: string;
-  customerName?: string;
-  restaurantName?: string;
-  totalAmount?: number;
-  status?: string;
-  createdAt?: any;
-}
+import { fetchCategories } from '../services/categoryService';
+import { fetchLatestOrders, subscribeLatestOrders } from '../services/orderService';
 
 const CatalogOrders = () => {
-  const [categories, setCategories] = useState<CategoryDoc[]>([]);
-  const [orders, setOrders] = useState<OrderDoc[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+
+  const {
+    data: categories = [],
+    isLoading: categoriesLoading,
+    error: categoriesError,
+  } = useQuery({
+    queryKey: ['categories', 'list'],
+    queryFn: fetchCategories,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const {
+    data: orders = [],
+    isLoading: ordersLoading,
+    error: ordersError,
+  } = useQuery({
+    queryKey: ['orders', 'latest'],
+    queryFn: () => fetchLatestOrders(15),
+    staleTime: 1000 * 30,
+  });
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [catSnap, orderSnap] = await Promise.all([
-          getDocs(query(collection(db, 'categories'), orderBy('priority', 'asc'))),
-          getDocs(query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(15))),
-        ]);
-        setCategories(
-          catSnap.docs.map((docSnap) => ({
-            ...(docSnap.data() as CategoryDoc),
-            id: docSnap.id,
-          })),
-        );
-        setOrders(
-          orderSnap.docs.map((docSnap) => ({
-            ...(docSnap.data() as OrderDoc),
-            id: docSnap.id,
-          })),
-        );
-      } catch (err) {
-        console.error('Error loading catalog data', err);
-      } finally {
-        setLoading(false);
-      }
-    };
+    const unsubscribe = subscribeLatestOrders(15, (next) => {
+      queryClient.setQueryData(['orders', 'latest'], next);
+    });
+    return unsubscribe;
+  }, [queryClient]);
 
-    fetchData();
-  }, []);
+  const loading = categoriesLoading || ordersLoading;
+  const errorMessage = categoriesError || ordersError ? 'Không thể tải dữ liệu danh mục/đơn hàng.' : null;
 
   return (
     <div className="page">
@@ -79,6 +63,8 @@ const CatalogOrders = () => {
           </div>
           {loading ? (
             <div className="panel__empty">Đang tải dữ liệu...</div>
+          ) : errorMessage ? (
+            <div className="panel__empty error">{errorMessage}</div>
           ) : (
             <div className="category-grid">
               {categories.map((cat) => (
@@ -106,6 +92,8 @@ const CatalogOrders = () => {
           </div>
           {loading ? (
             <div className="panel__empty">Đang tải dữ liệu...</div>
+          ) : errorMessage ? (
+            <div className="panel__empty error">{errorMessage}</div>
           ) : (
             <div className="table table--compact">
               <div className="table__head">

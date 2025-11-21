@@ -1,41 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { FiMessageCircle, FiPhoneCall } from 'react-icons/fi';
-import { collection, getDocs, orderBy, query } from 'firebase/firestore';
-import { db } from '../firebase';
-
-type Ticket = {
-  id: string;
-  customer?: string;
-  topic?: string;
-  channel?: 'app' | 'phone' | 'email';
-  severity?: 'low' | 'medium' | 'high';
-  status?: 'new' | 'in-progress' | 'resolved';
-  updatedAt?: string;
-};
+import { fetchSupportTickets } from '../services/supportService';
 
 const Support = () => {
-  const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchTickets = async () => {
-      try {
-        const snap = await getDocs(query(collection(db, 'supportTickets'), orderBy('updatedAt', 'desc')));
-        setTickets(
-          snap.docs.map((docSnap) => ({
-            ...(docSnap.data() as Ticket),
-            id: docSnap.id,
-          })),
-        );
-      } catch (err) {
-        console.error('Error loading tickets', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTickets();
-  }, []);
+  const {
+    data: tickets = [],
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ['support', 'tickets'],
+    queryFn: fetchSupportTickets,
+    staleTime: 1000 * 60,
+  });
 
   return (
     <div className="page">
@@ -68,8 +44,10 @@ const Support = () => {
               <option>7 ngày</option>
             </select>
           </div>
-          {loading ? (
+          {isLoading ? (
             <div className="panel__empty">Đang tải dữ liệu...</div>
+          ) : error ? (
+            <div className="panel__empty error">Không thể tải danh sách ticket.</div>
           ) : (
             <div className="table">
               <div className="table__head">

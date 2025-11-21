@@ -1,72 +1,49 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore';
 import StatCard from '../components/StatCard';
 import StatusBadge from '../components/StatusBadge';
-import { db } from '../firebase';
+import type { OrderDoc } from '../services/orderService';
+import { fetchLatestOrders } from '../services/orderService';
+import type { PromotionDoc } from '../services/promotionService';
+import { fetchPromotions } from '../services/promotionService';
 
-type OrderDoc = {
-  id: string;
-  status?: string;
-  totalAmount?: number;
-  createdAt?: any;
-  customerName?: string;
-  restaurant?: string;
-  restaurantName?: string;
-};
+type TimestampLike = OrderDoc['createdAt'];
 
-type PromotionDoc = {
-  id: string;
-  name?: string;
-  owner?: string;
-  usage?: number;
-  budget?: number;
-  start?: string;
-  end?: string;
-  status?: string;
-};
-
-const toDate = (value: any) => {
+const toDate = (value?: TimestampLike | null) => {
   if (!value) return null;
   if (value instanceof Date) return value;
-  if (typeof value.toDate === 'function') return value.toDate();
-  return new Date(value);
+  if (typeof value === 'number' || typeof value === 'string') return new Date(value);
+  if (typeof (value as { toDate?: () => Date }).toDate === 'function') {
+    return (value as { toDate: () => Date }).toDate();
+  }
+  return null;
 };
 
 const Dashboard = () => {
-  const [orders, setOrders] = useState<OrderDoc[]>([]);
-  const [promotions, setPromotions] = useState<PromotionDoc[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    data: orders = [],
+    isLoading: ordersLoading,
+    error: ordersError,
+  } = useQuery<OrderDoc[]>({
+    queryKey: ['orders', 'dashboard'],
+    queryFn: () => fetchLatestOrders(500),
+    staleTime: 1000 * 30,
+  });
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [ordersSnap, promotionsSnap] = await Promise.all([
-          getDocs(query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(500))),
-          getDocs(collection(db, 'promotions')),
-        ]);
+  const {
+    data: promotions = [],
+    isLoading: promotionsLoading,
+    error: promotionsError,
+  } = useQuery<PromotionDoc[]>({
+    queryKey: ['promotions', 'dashboard'],
+    queryFn: fetchPromotions,
+    staleTime: 1000 * 60,
+  });
 
-        setOrders(
-          ordersSnap.docs.map((docSnap) => ({
-            ...(docSnap.data() as OrderDoc),
-            id: docSnap.id,
-          })),
-        );
-        setPromotions(
-          promotionsSnap.docs.map((docSnap) => ({
-            ...(docSnap.data() as PromotionDoc),
-            id: docSnap.id,
-          })),
-        );
-      } catch (err) {
-        console.error('Error loading dashboard data', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, []);
+  const loading = ordersLoading || promotionsLoading;
+  const hasError = Boolean(ordersError || promotionsError);
+  const errorMessage = hasError ? 'Không thể tải dữ liệu tổng quan.' : null;
 
   const stats = useMemo(() => {
     const today = new Date();
@@ -182,6 +159,8 @@ const Dashboard = () => {
           </div>
           {loading ? (
             <div className="panel__empty">Đang tải dữ liệu...</div>
+          ) : errorMessage ? (
+            <div className="panel__empty error">{errorMessage}</div>
           ) : (
             <ResponsiveContainer width="100%" height={260}>
               <AreaChart data={orderVolumeSeries} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
@@ -218,21 +197,29 @@ const Dashboard = () => {
             <button className="btn btn--ghost">Xem tất cả</button>
           </div>
           <div className="list">
-            {liveOrders.map((order) => (
-              <div key={order.id} className="list__item">
-                <div>
-                  <p className="list__title">{order.id}</p>
-                  <p className="list__subtitle">
-                    {order.restaurantName || order.restaurant || 'Nhà hàng'} • {order.customerName || 'Khách hàng'}
-                  </p>
-                </div>
-                <div className="list__meta">
-                  <p>{(order.totalAmount ?? 0).toLocaleString('vi-VN')}đ</p>
-                  <StatusBadge status={order.status ?? 'pending'} />
-                </div>
-              </div>
-            ))}
-            {!liveOrders.length && <p className="panel__empty">Chưa có đơn hàng nào.</p>}
+            {loading ? (
+              <p className="panel__empty">Đang tải dữ liệu...</p>
+            ) : errorMessage ? (
+              <p className="panel__empty error">{errorMessage}</p>
+            ) : (
+              <>
+                {liveOrders.map((order) => (
+                  <div key={order.id} className="list__item">
+                    <div>
+                      <p className="list__title">{order.id}</p>
+                      <p className="list__subtitle">
+                        {order.restaurantName || order.restaurant || 'Nhà hàng'} • {order.customerName || 'Khách hàng'}
+                      </p>
+                    </div>
+                    <div className="list__meta">
+                      <p>{(order.totalAmount ?? 0).toLocaleString('vi-VN')}đ</p>
+                      <StatusBadge status={order.status ?? 'pending'} />
+                    </div>
+                  </div>
+                ))}
+                {!liveOrders.length && <p className="panel__empty">Chưa có đơn hàng nào.</p>}
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -247,23 +234,31 @@ const Dashboard = () => {
             <button className="btn btn--ghost">Quản lý</button>
           </div>
           <div className="promo-grid">
-            {activePromotions.map((promo) => (
-              <div key={promo.id} className="promo-card">
-                <div className={`promo-card__status promo-card__status--${(promo.status ?? '').toLowerCase()}`}>
-                  {promo.status || 'scheduled'}
-                </div>
-                <h4>{promo.name}</h4>
-                <p>{promo.owner || 'Marketing team'}</p>
-                <div className="promo-card__meta">
-                  <span>Lượt dùng: {(promo.usage ?? 0).toLocaleString('vi-VN')}</span>
-                  <span>Ngân sách: ₫{(promo.budget ?? 0).toLocaleString('vi-VN')}</span>
-                </div>
-                <p className="promo-card__time">
-                  {promo.start || 'N/A'} → {promo.end || 'N/A'}
-                </p>
-              </div>
-            ))}
-            {!activePromotions.length && <p className="panel__empty">Chưa có chiến dịch nào.</p>}
+            {loading ? (
+              <p className="panel__empty">Đang tải dữ liệu...</p>
+            ) : errorMessage ? (
+              <p className="panel__empty error">{errorMessage}</p>
+            ) : (
+              <>
+                {activePromotions.map((promo) => (
+                  <div key={promo.id} className="promo-card">
+                    <div className={`promo-card__status promo-card__status--${(promo.status ?? '').toLowerCase()}`}>
+                      {promo.status || 'scheduled'}
+                    </div>
+                    <h4>{promo.name}</h4>
+                    <p>{promo.owner || 'Marketing team'}</p>
+                    <div className="promo-card__meta">
+                      <span>Lượt dùng: {(promo.usage ?? 0).toLocaleString('vi-VN')}</span>
+                      <span>Ngân sách: ₫{(promo.budget ?? 0).toLocaleString('vi-VN')}</span>
+                    </div>
+                    <p className="promo-card__time">
+                      {promo.start || 'N/A'} → {promo.end || 'N/A'}
+                    </p>
+                  </div>
+                ))}
+                {!activePromotions.length && <p className="panel__empty">Chưa có chiến dịch nào.</p>}
+              </>
+            )}
           </div>
         </div>
 

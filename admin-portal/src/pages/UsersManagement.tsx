@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FiFilter, FiLock, FiRefreshCw, FiUnlock } from 'react-icons/fi';
-import { collection, doc, getDocs, updateDoc } from 'firebase/firestore';
 import StatusBadge from '../components/StatusBadge';
 import type { UserAccount, UserRole } from '../types';
-import { db } from '../firebase';
+import { fetchUsersWithOrderMeta, toggleUserStatus } from '../services/userService';
 
 const roleFilters: { label: string; value: 'all' | UserRole }[] = [
   { label: 'Tất cả', value: 'all' },
@@ -12,88 +12,57 @@ const roleFilters: { label: string; value: 'all' | UserRole }[] = [
   { label: 'Tài xế', value: 'driver' },
 ];
 
-type OrderDoc = { id: string; userId?: string; totalAmount?: number; status?: string };
+const usersQueryKey = ['users', 'list'];
 
 const UsersManagement = () => {
-  const [records, setRecords] = useState<UserAccount[]>([]);
   const [filter, setFilter] = useState<'all' | UserRole>('all');
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const fetchData = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [usersSnap, ordersSnap] = await Promise.all([
-        getDocs(collection(db, 'users')),
-        getDocs(collection(db, 'orders')),
-      ]);
-      const orders: OrderDoc[] = ordersSnap.docs.map((docSnap) => ({
-        ...(docSnap.data() as OrderDoc),
-        id: docSnap.id,
-      }));
+  const {
+    data: records = [],
+    isLoading,
+    isFetching,
+    refetch,
+    error: queryError,
+  } = useQuery({
+    queryKey: usersQueryKey,
+    queryFn: fetchUsersWithOrderMeta,
+    staleTime: 1000 * 60,
+  });
 
-      const mappedUsers: UserAccount[] = usersSnap.docs.map((docSnap) => {
-        const data = docSnap.data() as any;
-        const userOrders = orders.filter((order) => order.userId === docSnap.id);
-        const rawRole = (data.role ?? 'customer').toLowerCase();
-        const normalizedRole: UserRole =
-          rawRole === 'user'
-            ? 'customer'
-            : rawRole === 'shipper'
-            ? 'driver'
-            : (['customer', 'restaurant', 'driver', 'admin'] as const).includes(rawRole as UserRole)
-            ? (rawRole as UserRole)
-            : 'customer';
-        const rawStatus = (data.status ?? 'active').toLowerCase();
-        const allowedStatuses: UserAccount['status'][] = ['active', 'locked', 'pending', 'blocked'];
-        const normalizedStatus: UserAccount['status'] =
-          rawStatus === 'blocked'
-            ? 'locked'
-            : allowedStatuses.includes(rawStatus as UserAccount['status'])
-            ? (rawStatus as UserAccount['status'])
-            : 'active';
-        return {
-          id: docSnap.id,
-          name: data.name || data.username || 'Chưa cập nhật',
-          role: normalizedRole,
-          email: data.email || '',
-          phone: data.phone || '',
-          status: normalizedStatus,
-          createdAt: data.createdAt?.toDate?.().toLocaleDateString('vi-VN') ?? '',
-          orders: userOrders.length,
-          rating: data.rating,
-          city: data.city,
-        };
-      });
-      setRecords(mappedUsers);
-    } catch (err) {
-      console.error('Error fetching users', err);
-      setError('Không thể tải danh sách người dùng.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const { mutateAsync: mutateStatus, isPending: isMutating } = useMutation({
+    mutationFn: toggleUserStatus,
+    onMutate: async ({ id, currentStatus }) => {
+      await queryClient.cancelQueries({ queryKey: usersQueryKey });
+      const previous = queryClient.getQueryData<UserAccount[]>(usersQueryKey);
+      queryClient.setQueryData<UserAccount[]>(usersQueryKey, (old) =>
+        (old ?? []).map((record) => (record.id === id ? { ...record, status: currentStatus === 'locked' ? 'active' : 'locked' } : record)),
+      );
+      return { previous };
+    },
+    onError: (_err, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(usersQueryKey, context.previous);
+      }
+      setError('Không thể cập nhật trạng thái tài khoản.');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: usersQueryKey });
+    },
+  });
 
   const filteredUsers = useMemo(() => {
     if (filter === 'all') return records;
     return records.filter((user) => user.role === filter);
   }, [records, filter]);
 
-  const toggleLock = async (id: string, currentStatus: UserAccount['status']) => {
-    const nextStatus = currentStatus === 'locked' ? 'active' : 'locked';
-    try {
-      await updateDoc(doc(db, 'users', id), { status: nextStatus });
-      setRecords((prev) => prev.map((record) => (record.id === id ? { ...record, status: nextStatus } : record)));
-    } catch (err) {
-      console.error('Error updating status', err);
-      setError('Không thể cập nhật trạng thái tài khoản.');
-    }
+  const handleToggle = async (user: UserAccount) => {
+    setError(null);
+    await mutateStatus({ id: user.id, currentStatus: user.status });
   };
+
+  const displayError = error ?? (queryError ? 'Không thể tải danh sách người dùng.' : null);
 
   return (
     <div className="page">
@@ -105,7 +74,7 @@ const UsersManagement = () => {
           </p>
         </div>
         <div className="page__actions">
-          <button className="btn btn--ghost" onClick={fetchData} disabled={loading}>
+          <button className="btn btn--ghost" onClick={() => refetch()} disabled={isFetching}>
             <FiRefreshCw />
             Làm mới
           </button>
@@ -150,10 +119,10 @@ const UsersManagement = () => {
           </div>
         </div>
 
-        {loading ? (
+        {isLoading ? (
           <div className="panel__empty">Đang tải dữ liệu...</div>
-        ) : error ? (
-          <div className="panel__empty error">{error}</div>
+        ) : displayError ? (
+          <div className="panel__empty error">{displayError}</div>
         ) : (
           <div className="table">
             <div className="table__head">
@@ -180,7 +149,7 @@ const UsersManagement = () => {
                   <StatusBadge status={user.status} />
                 </span>
                 <span>
-                  <button className="btn btn--ghost" onClick={() => toggleLock(user.id, user.status)}>
+                  <button className="btn btn--ghost" onClick={() => handleToggle(user)} disabled={isMutating}>
                     {user.status === 'locked' ? (
                       <>
                         <FiUnlock /> Mở khóa

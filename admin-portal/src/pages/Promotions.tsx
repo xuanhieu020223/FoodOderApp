@@ -1,41 +1,16 @@
-import { useEffect, useState } from 'react';
-import { collection, getDocs, orderBy, query } from 'firebase/firestore';
-import { db } from '../firebase';
-
-type PromotionDoc = {
-  id: string;
-  name?: string;
-  owner?: string;
-  start?: string;
-  end?: string;
-  usage?: number;
-  budget?: number;
-  status?: string;
-};
+import { useQuery } from '@tanstack/react-query';
+import { fetchPromotions } from '../services/promotionService';
 
 const Promotions = () => {
-  const [promotions, setPromotions] = useState<PromotionDoc[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchPromotions = async () => {
-      try {
-        const snap = await getDocs(query(collection(db, 'promotions'), orderBy('start', 'desc')));
-        setPromotions(
-          snap.docs.map((docSnap) => ({
-            ...(docSnap.data() as PromotionDoc),
-            id: docSnap.id,
-          })),
-        );
-      } catch (err) {
-        console.error('Error loading promotions', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchPromotions();
-  }, []);
+  const {
+    data: promotions = [],
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ['promotions', 'list'],
+    queryFn: fetchPromotions,
+    staleTime: 1000 * 60 * 5,
+  });
 
   return (
     <div className="page">
@@ -62,8 +37,10 @@ const Promotions = () => {
           </select>
         </div>
 
-        {loading ? (
+        {isLoading ? (
           <div className="panel__empty">Đang tải dữ liệu...</div>
+        ) : error ? (
+          <div className="panel__empty error">Không thể tải danh sách chiến dịch.</div>
         ) : (
           <div className="table">
             <div className="table__head">

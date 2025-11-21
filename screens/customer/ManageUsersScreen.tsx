@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -21,8 +21,8 @@ interface User {
   name: string;
   email: string;
   phone: string;
-  role: 'user' | 'admin';
-  status: 'active' | 'blocked';
+  role: 'user' | 'admin' | 'restaurant' | 'driver';
+  status: 'active' | 'blocked' | 'pending';
   orderCount: number;
   totalSpent: number;
   lastActive: string;
@@ -38,18 +38,75 @@ interface Order {
   items: any[];
 }
 
+const ROLE_META: Record<User['role'], { label: string; color: string }> = {
+  user: { label: 'Khách hàng', color: '#607D8B' },
+  admin: { label: 'Quản trị viên', color: '#2196F3' },
+  restaurant: { label: 'Nhà hàng', color: '#FF9800' },
+  driver: { label: 'Tài xế', color: '#009688' },
+};
+
 const ManageUsersScreen = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [roleFilter, setRoleFilter] = useState<'all' | 'user' | 'admin'>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'blocked'>('all');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'user' | 'admin' | 'restaurant' | 'driver'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'blocked' | 'pending'>('all');
+
+  const normalizeRole = (rawRole?: string): User['role'] => {
+    const role = (rawRole || 'user').toLowerCase();
+    if (role === 'admin') return 'admin';
+    if (['restaurant', 'merchant', 'partner'].includes(role)) return 'restaurant';
+    if (['shipper', 'driver', 'courier'].includes(role)) return 'driver';
+    return 'user';
+  };
+
+  const normalizeStatus = (rawStatus?: string): User['status'] => {
+    const status = (rawStatus || 'active').toLowerCase();
+    if (status === 'pending') return 'pending';
+    if (['blocked', 'locked', 'suspended'].includes(status)) return 'blocked';
+    return 'active';
+  };
 
   useEffect(() => {
     loadUsers();
   }, []);
+
+  const filteredUsers = useMemo(() => {
+    const keyword = searchQuery.trim().toLowerCase();
+    return users.filter((user) => {
+      if (roleFilter !== 'all' && user.role !== roleFilter) {
+        return false;
+      }
+      if (statusFilter !== 'all' && user.status !== statusFilter) {
+        return false;
+      }
+      if (keyword) {
+        return (
+          user.name.toLowerCase().includes(keyword) ||
+          user.email.toLowerCase().includes(keyword) ||
+          user.phone.toLowerCase().includes(keyword)
+        );
+      }
+      return true;
+    });
+  }, [users, roleFilter, statusFilter, searchQuery]);
+
+  const roleStats = useMemo(
+    () =>
+      users.reduce(
+        (acc, user) => {
+          if (user.role === 'user') acc.customers += 1;
+          if (user.role === 'restaurant') acc.restaurants += 1;
+          if (user.role === 'driver') acc.drivers += 1;
+          if (user.role === 'admin') acc.admins += 1;
+          return acc;
+        },
+        { customers: 0, restaurants: 0, drivers: 0, admins: 0 }
+      ),
+    [users]
+  );
 
   const loadUsers = async () => {
     try {
@@ -92,11 +149,11 @@ const ManageUsersScreen = () => {
         
         usersData.push({
           id: doc.id,
-          name: userData.name || '',
+          name: userData.name || userData.username || '',
           email: userData.email || '',
           phone: userData.phone || '',
-          role: userData.role || 'user',
-          status: userData.status || 'active',
+          role: normalizeRole(userData.role),
+          status: normalizeStatus(userData.status),
           orderCount,
           totalSpent,
           lastActive,
@@ -152,7 +209,9 @@ const ManageUsersScreen = () => {
     setModalVisible(true);
   };
 
-  const renderUserItem = ({ item }: { item: User }) => (
+  const renderUserItem = ({ item }: { item: User }) => {
+    const roleMeta = ROLE_META[item.role];
+    return (
     <TouchableOpacity
       style={styles.userCard}
       onPress={() => handleViewUserDetails(item)}
@@ -167,13 +226,18 @@ const ManageUsersScreen = () => {
       
       <View style={styles.userInfo}>
         <View style={styles.userHeader}>
+            <View>
           <Text style={styles.userName}>{item.name}</Text>
+              <Text style={[styles.roleLabel, { color: roleMeta.color }]}>
+                {roleMeta.label}
+              </Text>
+            </View>
           <View style={[
             styles.statusBadge,
-            { backgroundColor: item.status === 'active' ? '#4CAF50' : '#f44336' }
+              { backgroundColor: item.status === 'active' ? '#4CAF50' : item.status === 'pending' ? '#FF9800' : '#f44336' }
           ]}>
             <Text style={styles.statusText}>
-              {item.status === 'active' ? 'Hoạt động' : 'Đã chặn'}
+                {item.status === 'active' ? 'Hoạt động' : item.status === 'pending' ? 'Chờ duyệt' : 'Đã chặn'}
             </Text>
           </View>
         </View>
@@ -220,6 +284,7 @@ const ManageUsersScreen = () => {
       </TouchableOpacity>
     </TouchableOpacity>
   );
+  };
 
   const UserDetailsModal = () => {
     if (!selectedUser) return null;
@@ -258,10 +323,10 @@ const ManageUsersScreen = () => {
               <Text style={styles.detailsName}>{selectedUser.name}</Text>
               <View style={[
                 styles.roleBadge,
-                { backgroundColor: selectedUser.role === 'admin' ? '#2196F3' : '#FF9800' }
+                { backgroundColor: ROLE_META[selectedUser.role].color }
               ]}>
                 <Text style={styles.roleText}>
-                  {selectedUser.role === 'admin' ? 'Quản trị viên' : 'Người dùng'}
+                  {ROLE_META[selectedUser.role].label}
                 </Text>
               </View>
 
@@ -305,12 +370,29 @@ const ManageUsersScreen = () => {
                 </View>
                 <View style={styles.detailRow}>
                   <MaterialIcons
-                    name={selectedUser.status === 'active' ? 'check-circle' : 'block'}
+                    name={
+                      selectedUser.status === 'active'
+                        ? 'check-circle'
+                        : selectedUser.status === 'pending'
+                        ? 'hourglass-top'
+                        : 'block'
+                    }
                     size={20}
-                    color={selectedUser.status === 'active' ? '#4CAF50' : '#f44336'}
+                    color={
+                      selectedUser.status === 'active'
+                        ? '#4CAF50'
+                        : selectedUser.status === 'pending'
+                        ? '#FF9800'
+                        : '#f44336'
+                    }
                   />
                   <Text style={styles.detailText}>
-                    Trạng thái: {selectedUser.status === 'active' ? 'Đang hoạt động' : 'Đã bị chặn'}
+                    Trạng thái:{' '}
+                    {selectedUser.status === 'active'
+                      ? 'Đang hoạt động'
+                      : selectedUser.status === 'pending'
+                      ? 'Chờ duyệt'
+                      : 'Đã bị chặn'}
                   </Text>
                 </View>
               </View>
@@ -379,6 +461,30 @@ const ManageUsersScreen = () => {
           <Text style={styles.statLabel}>Đã chặn</Text>
         </View>
       </View>
+      
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.roleStatsRow}
+        contentContainerStyle={styles.roleStatsContent}
+      >
+        <View style={styles.roleStatCard}>
+          <Text style={styles.roleStatLabel}>Khách hàng</Text>
+          <Text style={styles.roleStatValue}>{roleStats.customers}</Text>
+        </View>
+        <View style={styles.roleStatCard}>
+          <Text style={styles.roleStatLabel}>Nhà hàng</Text>
+          <Text style={styles.roleStatValue}>{roleStats.restaurants}</Text>
+        </View>
+        <View style={styles.roleStatCard}>
+          <Text style={styles.roleStatLabel}>Tài xế</Text>
+          <Text style={styles.roleStatValue}>{roleStats.drivers}</Text>
+        </View>
+        <View style={styles.roleStatCard}>
+          <Text style={styles.roleStatLabel}>Quản trị viên</Text>
+          <Text style={styles.roleStatValue}>{roleStats.admins}</Text>
+        </View>
+      </ScrollView>
 
       <View style={styles.searchContainer}>
         <View style={styles.searchBox}>
@@ -440,6 +546,34 @@ const ManageUsersScreen = () => {
               Người dùng
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              roleFilter === 'restaurant' && styles.filterButtonActive
+            ]}
+            onPress={() => setRoleFilter('restaurant')}
+          >
+            <Text style={[
+              styles.filterText,
+              roleFilter === 'restaurant' && styles.filterTextActive
+            ]}>
+              Nhà hàng
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              roleFilter === 'driver' && styles.filterButtonActive
+            ]}
+            onPress={() => setRoleFilter('driver')}
+          >
+            <Text style={[
+              styles.filterText,
+              roleFilter === 'driver' && styles.filterTextActive
+            ]}>
+              Tài xế
+            </Text>
+          </TouchableOpacity>
         </ScrollView>
       </View>
 
@@ -491,33 +625,25 @@ const ManageUsersScreen = () => {
               Đã chặn
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.filterButton,
+              statusFilter === 'pending' && styles.filterButtonActive
+            ]}
+            onPress={() => setStatusFilter('pending')}
+          >
+            <Text style={[
+              styles.filterText,
+              statusFilter === 'pending' && styles.filterTextActive
+            ]}>
+              Chờ duyệt
+            </Text>
+          </TouchableOpacity>
         </ScrollView>
       </View>
 
       <FlatList
-        data={users.filter(user => {
-          // Filter by role
-          if (roleFilter !== 'all' && user.role !== roleFilter) {
-            return false;
-          }
-          
-          // Filter by status
-          if (statusFilter !== 'all' && user.status !== statusFilter) {
-            return false;
-          }
-          
-          // Search by name, email or phone
-          if (searchQuery) {
-            const query = searchQuery.toLowerCase();
-            return (
-              user.name.toLowerCase().includes(query) ||
-              user.email.toLowerCase().includes(query) ||
-              user.phone.toLowerCase().includes(query)
-            );
-          }
-          
-          return true;
-        })}
+        data={filteredUsers}
         renderItem={renderUserItem}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContainer}
@@ -558,6 +684,36 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 12,
     color: '#666',
+  },
+  roleStatsRow: {
+    backgroundColor: '#fff',
+    marginHorizontal: 12,
+    marginBottom: 10,
+    borderRadius: 12,
+    paddingVertical: 10,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+  },
+  roleStatsContent: {
+    paddingHorizontal: 12,
+  },
+  roleStatCard: {
+    paddingHorizontal: 18,
+    borderRightWidth: 1,
+    borderRightColor: '#eee',
+  },
+  roleStatLabel: {
+    fontSize: 12,
+    color: '#666',
+  },
+  roleStatValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 4,
   },
   searchContainer: {
     backgroundColor: '#fff',
@@ -646,6 +802,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
+  },
+  roleLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
   },
   statusBadge: {
     paddingHorizontal: 10,

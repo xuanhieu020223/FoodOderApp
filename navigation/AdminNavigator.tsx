@@ -10,6 +10,8 @@ import ManageCategoriesScreen from '../screens/customer/ManageCategoriesScreen';
 import ManageOrdersScreen from '../screens/customer/ManageOrdersScreen';
 import StatisticsScreen from '../screens/customer/StatisticsScreen';
 import AdminDashboardScreen from '../screens/customer/AdminDashboardScreen';
+import PromotionManagementScreen from '../screens/customer/PromotionManagementScreen';
+import SupportCenterScreen from '../screens/customer/SupportCenterScreen';
 
 type AdminStackParamList = {
   AdminDashboard: undefined;
@@ -18,6 +20,8 @@ type AdminStackParamList = {
   ManageCategories: undefined;
   ManageUsers: undefined;
   Statistics: undefined;
+  ManagePromotions: undefined;
+  SupportCenter: undefined;
 };
 
 const Stack = createStackNavigator<AdminStackParamList>();
@@ -94,6 +98,20 @@ const AdminNavigator = () => {
         component={StatisticsScreen}
         options={{
           title: 'Thống kê doanh thu',
+        }}
+      />
+      <Stack.Screen
+        name="ManagePromotions"
+        component={PromotionManagementScreen}
+        options={{
+          title: 'Quản lý khuyến mãi',
+        }}
+      />
+      <Stack.Screen
+        name="SupportCenter"
+        component={SupportCenterScreen}
+        options={{
+          title: 'Hỗ trợ & khiếu nại',
         }}
       />
     </Stack.Navigator>

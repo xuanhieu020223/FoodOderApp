@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, type AuthError } from 'firebase/auth';
 import { auth } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 
@@ -24,9 +24,10 @@ const Login = () => {
       await signInWithEmailAndPassword(auth, email.trim(), password);
       const redirectPath = (location.state as { from?: string })?.from || '/';
       navigate(redirectPath, { replace: true });
-    } catch (err: any) {
+    } catch (err) {
       console.error('Login error', err);
-      switch (err.code) {
+      const firebaseError = err as AuthError | { code?: string };
+      switch (firebaseError.code) {
         case 'auth/invalid-credential':
           setError('Email hoặc mật khẩu không đúng.');
           break;
