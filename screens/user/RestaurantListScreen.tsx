@@ -88,6 +88,11 @@ const RestaurantListScreen = ({ navigation }: any) => {
                 {item.rating ? `${item.rating.toFixed(1)} ★ · ` : ''}{item.deliveryTime || '20-30 phút'}
               </Text>
               <Text style={styles.address} numberOfLines={1}>{item.address}</Text>
+              {item.openingHours && (
+                <Text style={styles.hours} numberOfLines={1}>
+                  Giờ mở cửa: {item.openingHours}
+                </Text>
+              )}
             </View>
             <Ionicons name="chevron-forward" size={20} color="#d1d5db" />
           </TouchableOpacity>
@@ -136,6 +141,7 @@ const styles = StyleSheet.create({
   name: { fontWeight: '600', fontSize: 15, color: '#111827' },
   meta: { fontSize: 12, color: '#f97316', marginTop: 2 },
   address: { fontSize: 12, color: '#6b7280', marginTop: 2 },
+  hours: { fontSize: 12, color: '#059669', marginTop: 2 },
   emptyText: { textAlign: 'center', color: '#6b7280', marginTop: 40 },
 });
 

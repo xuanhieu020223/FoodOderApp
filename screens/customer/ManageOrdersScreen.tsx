@@ -122,15 +122,38 @@ const ManageOrdersScreen = () => {
       const roleToUse = roleOverride || userRole;
       const ownerIdToUse = ownerIdOverride || currentUserId;
       let q = query(ordersRef, orderBy('createdAt', 'desc'));
+      
+      // For restaurant, we need to get all orders and filter by restaurantId or items
       if (roleToUse === 'restaurant' && ownerIdToUse) {
-        q = query(ordersRef, where('restaurantId', '==', ownerIdToUse), orderBy('createdAt', 'desc'));
+        // Get all orders and filter on client side to handle cases where:
+        // 1. restaurantId matches ownerId
+        // 2. Items in order have restaurantId matching ownerId
+        q = query(ordersRef, orderBy('createdAt', 'desc'));
       }
+      
       const querySnapshot = await getDocs(q);
       
       const ordersData: Order[] = [];
       
       for (const doc of querySnapshot.docs) {
         const orderData = doc.data();
+        
+        // For restaurant role, filter orders that belong to this restaurant
+        if (roleToUse === 'restaurant' && ownerIdToUse) {
+          const orderRestaurantId = orderData.restaurantId;
+          const orderItems = orderData.items || [];
+          
+          // Check if order belongs to this restaurant by:
+          // 1. restaurantId matches ownerId
+          // 2. Any item in the order has restaurantId matching ownerId
+          const belongsToRestaurant = 
+            orderRestaurantId === ownerIdToUse ||
+            orderItems.some((item: any) => item.restaurantId === ownerIdToUse);
+          
+          if (!belongsToRestaurant) {
+            continue; // Skip this order
+          }
+        }
         
         // Sửa lại cách lấy thông tin khách hàng
         ordersData.push({

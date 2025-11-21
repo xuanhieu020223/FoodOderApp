@@ -1,13 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Image, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Image, FlatList, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { doc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../../config/Firebase';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { UserStackParamList } from '../../navigation/UserNavigator';
+
+type NavigationProp = NativeStackNavigationProp<UserStackParamList>;
+
+const PLACEHOLDER_FOOD_IMAGE = 'https://via.placeholder.com/80?text=Food';
+const PLACEHOLDER_RESTAURANT_IMAGE = 'https://via.placeholder.com/600x300?text=Restaurant';
 
 const RestaurantDetailScreen = ({ route }: any) => {
   const { restaurantId } = route.params;
   const [restaurant, setRestaurant] = useState<any>(null);
   const [foods, setFoods] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const navigation = useNavigation<NavigationProp>();
 
   useEffect(() => {
     fetchDetail();
@@ -41,22 +50,41 @@ const RestaurantDetailScreen = ({ route }: any) => {
 
   return (
     <View style={styles.container}>
-      <Image source={{ uri: restaurant.image }} style={styles.image} />
+      <Image
+        source={{ uri: restaurant.image || PLACEHOLDER_RESTAURANT_IMAGE }}
+        style={styles.image}
+      />
       <Text style={styles.name}>{restaurant.name}</Text>
       <Text style={styles.address}>{restaurant.address}</Text>
       <Text style={styles.desc}>{restaurant.description}</Text>
+      {restaurant.openingHours && (
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>Giờ mở cửa:</Text>
+          <Text style={styles.infoValue}>{restaurant.openingHours}</Text>
+        </View>
+      )}
       <Text style={styles.menuHeader}>Thực đơn</Text>
       <FlatList
         data={foods}
         keyExtractor={item => item.id}
         renderItem={({ item }) => (
-          <View style={styles.foodCard}>
-            <Image source={{ uri: item.image }} style={styles.foodImage} />
+          <TouchableOpacity
+            style={styles.foodCard}
+            activeOpacity={0.85}
+            onPress={() => navigation.navigate('FoodDetail', { foodId: item.id })}
+          >
+            <Image
+              source={{ uri: item.imageUrl || PLACEHOLDER_FOOD_IMAGE }}
+              style={styles.foodImage}
+            />
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Text style={styles.foodName}>{item.name}</Text>
+              <Text numberOfLines={2} style={styles.foodDescription}>
+                {item.description || 'Không có mô tả'}
+              </Text>
               <Text style={styles.foodPrice}>{item.price?.toLocaleString()} đ</Text>
             </View>
-          </View>
+          </TouchableOpacity>
         )}
         ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 20 }}>Chưa có món ăn nào</Text>}
       />
@@ -70,10 +98,18 @@ const styles = StyleSheet.create({
   name: { fontSize: 22, fontWeight: 'bold', color: '#222' },
   address: { fontSize: 14, color: '#555', marginTop: 2 },
   desc: { fontSize: 13, color: '#888', marginTop: 2, marginBottom: 10 },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  infoLabel: { fontSize: 14, color: '#333', fontWeight: '600', marginRight: 8 },
+  infoValue: { fontSize: 14, color: '#555' },
   menuHeader: { fontSize: 18, fontWeight: 'bold', color: '#ee4d2d', marginVertical: 10 },
   foodCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff7f3', borderRadius: 8, padding: 10, marginBottom: 12 },
   foodImage: { width: 50, height: 50, borderRadius: 8, backgroundColor: '#eee' },
   foodName: { fontWeight: 'bold', fontSize: 15, color: '#222' },
+  foodDescription: { fontSize: 12, color: '#666', marginTop: 2 },
   foodPrice: { fontSize: 14, color: '#ee4d2d', marginTop: 2 },
 });
 

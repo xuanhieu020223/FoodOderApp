@@ -4,6 +4,8 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  Modal,
+  FlatList,
   TextInput,
   TouchableOpacity,
   Alert,
@@ -51,6 +53,18 @@ interface LocationData {
   address: string;
 }
 
+type Voucher = {
+  id: string;
+  code: string;
+  description: string;
+  discountType: 'amount' | 'percent';
+  discountValue: number;
+  minOrder: number;
+  maxDiscount?: number;
+  expiryDate: Date;
+  isUsed?: boolean;
+};
+
 const DELIVERY_FEE = 15000; // 15,000 VND
 
 const CheckoutScreen = () => {
@@ -68,9 +82,11 @@ const CheckoutScreen = () => {
     note: '',
     paymentMethod: 'COD',
   });
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [location, setLocation] = useState<LocationData | null>(null);
   const [locationPermission, setLocationPermission] = useState<boolean>(false);
+  const [vouchers, setVouchers] = useState<Voucher[]>([]);
+  const [voucherModalVisible, setVoucherModalVisible] = useState(false);
+  const [selectedVoucher, setSelectedVoucher] = useState<Voucher | null>(null);
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -79,6 +95,7 @@ const CheckoutScreen = () => {
         await Promise.all([
           loadUserData(),
           loadSelectedItems(),
+          loadUserVouchers(),
           checkLocationPermission()
         ]);
       } catch (error) {
@@ -90,6 +107,12 @@ const CheckoutScreen = () => {
 
     loadInitialData();
   }, []);
+
+  useEffect(() => {
+    if (selectedVoucher && !isVoucherEligible(selectedVoucher)) {
+      setSelectedVoucher(null);
+    }
+  }, [cartItems]);
 
   const loadUserData = async () => {
     try {
@@ -159,12 +182,89 @@ const CheckoutScreen = () => {
     }
   };
 
-  const calculateSubTotal = () => {
-    return cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const loadUserVouchers = async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        return;
+      }
+
+      const vouchersRef = collection(db, 'vouchers');
+      const q = query(vouchersRef, where('userId', '==', user.uid));
+      const snapshot = await getDocs(q);
+
+      const voucherList: Voucher[] = [];
+      snapshot.forEach((voucherDoc) => {
+        const data = voucherDoc.data();
+        const discountValue =
+          typeof data.discountValue === 'number'
+            ? data.discountValue
+            : typeof data.discount === 'number'
+            ? data.discount
+            : 0;
+        const discountType: 'amount' | 'percent' =
+          data.discountType === 'percent' || data.discountType === 'amount'
+            ? data.discountType
+            : 'amount';
+
+        voucherList.push({
+          id: voucherDoc.id,
+          code: data.code,
+          description: data.description,
+          discountType,
+          discountValue,
+          minOrder: data.minOrder || 0,
+          maxDiscount: data.maxDiscount,
+          expiryDate: data.expiryDate?.toDate ? data.expiryDate.toDate() : new Date(),
+          isUsed: data.isUsed,
+        });
+      });
+
+      voucherList.sort((a, b) => {
+        if ((a.isUsed ? 1 : 0) !== (b.isUsed ? 1 : 0)) {
+          return a.isUsed ? 1 : -1;
+        }
+        return a.expiryDate.getTime() - b.expiryDate.getTime();
+      });
+
+      setVouchers(voucherList);
+    } catch (error) {
+      console.error('Error loading vouchers:', error);
+    }
   };
 
-  const calculateTotal = () => {
-    return calculateSubTotal() + DELIVERY_FEE;
+  const calculateSubTotal = () => {
+    return cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  };
+
+  const formatCurrency = (amount: number) =>
+    amount.toLocaleString('vi-VN', {
+      style: 'currency',
+      currency: 'VND',
+    });
+
+  const isVoucherEligible = (voucher: Voucher, amount = calculateSubTotal()) => {
+    const now = new Date();
+    if (voucher.isUsed) return false;
+    if (voucher.expiryDate && voucher.expiryDate.getTime() < now.getTime()) return false;
+    return amount >= (voucher.minOrder || 0);
+  };
+
+  const calculateVoucherDiscount = (voucher: Voucher, amount: number) => {
+    if (amount <= 0) return 0;
+    if (voucher.discountType === 'percent') {
+      const percentageDiscount = (amount * voucher.discountValue) / 100;
+      const cappedDiscount = voucher.maxDiscount
+        ? Math.min(percentageDiscount, voucher.maxDiscount)
+        : percentageDiscount;
+      return Math.min(cappedDiscount, amount);
+    }
+
+    const cappedAmount =
+      voucher.maxDiscount !== undefined
+        ? Math.min(voucher.discountValue, voucher.maxDiscount)
+        : voucher.discountValue;
+    return Math.min(cappedAmount, amount);
   };
 
   const handleInputChange = (field: keyof OrderDetails, value: string) => {
@@ -221,10 +321,37 @@ const CheckoutScreen = () => {
         return acc;
       }, {});
 
+      const subtotalAll = calculateSubTotal();
+      const applicableVoucher =
+        selectedVoucher && isVoucherEligible(selectedVoucher, subtotalAll) ? selectedVoucher : null;
+      const totalVoucherDiscount = applicableVoucher
+        ? calculateVoucherDiscount(applicableVoucher, subtotalAll)
+        : 0;
+      let remainingVoucherDiscount = totalVoucherDiscount;
+      const groupedEntries = Object.entries(groupedItems);
+      const createdOrderIds: string[] = [];
+
       const ordersRef = collection(db, 'orders');
 
-      for (const [restaurantId, items] of Object.entries(groupedItems)) {
+      for (let index = 0; index < groupedEntries.length; index++) {
+        const [restaurantId, items] = groupedEntries[index];
         const restaurantSubtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        let orderVoucherDiscount = 0;
+
+        if (applicableVoucher && totalVoucherDiscount > 0) {
+          if (index === groupedEntries.length - 1) {
+            orderVoucherDiscount = remainingVoucherDiscount;
+          } else {
+            const proportion = subtotalAll > 0 ? restaurantSubtotal / subtotalAll : 0;
+            orderVoucherDiscount = Math.min(
+              remainingVoucherDiscount,
+              Math.round(totalVoucherDiscount * proportion)
+            );
+          }
+        }
+
+        remainingVoucherDiscount = Math.max(0, remainingVoucherDiscount - orderVoucherDiscount);
+
         const orderPayload = {
           userId: user.uid,
           restaurantId: restaurantId === 'marketplace' ? null : restaurantId,
@@ -243,14 +370,31 @@ const CheckoutScreen = () => {
           address: orderDetails.address,
           subtotal: restaurantSubtotal,
           deliveryFee: DELIVERY_FEE,
-          totalAmount: restaurantSubtotal + DELIVERY_FEE,
+          voucherDiscount: orderVoucherDiscount,
+          voucherCode: applicableVoucher?.code || null,
+          voucherId: applicableVoucher?.id || null,
+          voucherType: applicableVoucher?.discountType || null,
+          totalAmount: Math.max(0, restaurantSubtotal + DELIVERY_FEE - orderVoucherDiscount),
           status: 'pending',
           note: orderDetails.note,
           paymentMethod: orderDetails.paymentMethod,
           createdAt: new Date(),
         };
 
-        await addDoc(ordersRef, orderPayload);
+        const newOrder = await addDoc(ordersRef, orderPayload);
+        createdOrderIds.push(newOrder.id);
+      }
+
+      if (applicableVoucher) {
+        try {
+          await updateDoc(doc(db, 'vouchers', applicableVoucher.id), {
+            isUsed: true,
+            usedAt: new Date(),
+            lastOrderId: createdOrderIds[0] || null,
+          });
+        } catch (voucherError) {
+          console.error('Error updating voucher status:', voucherError);
+        }
       }
 
       // Delete ordered items from cart
@@ -260,6 +404,11 @@ const CheckoutScreen = () => {
         batch.delete(cartItemRef);
       });
       await batch.commit();
+
+      if (applicableVoucher) {
+        await loadUserVouchers();
+        setSelectedVoucher(null);
+      }
 
       Alert.alert(
         'Thành công',
@@ -359,6 +508,14 @@ const CheckoutScreen = () => {
   }
 
   const subtotal = calculateSubTotal();
+  const isCurrentVoucherEligible =
+    selectedVoucher && isVoucherEligible(selectedVoucher, subtotal);
+  const voucherDiscountAmount =
+    selectedVoucher && isCurrentVoucherEligible
+      ? calculateVoucherDiscount(selectedVoucher, subtotal)
+      : 0;
+  const totalWithVoucher = Math.max(0, subtotal + DELIVERY_FEE - voucherDiscountAmount);
+  const availableVouchers = vouchers.filter(voucher => isVoucherEligible(voucher, subtotal));
 
   return (
     <View style={styles.container}>
@@ -438,6 +595,54 @@ const CheckoutScreen = () => {
               </View>
             </View>
           ))}
+        </View>
+
+        {/* Voucher Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.iconContainer}>
+              <Ionicons name="pricetag" size={20} color="#ee4d2d" />
+            </View>
+            <Text style={styles.sectionTitle}>Voucher & khuyến mãi</Text>
+          </View>
+          <TouchableOpacity
+            style={[
+              styles.voucherButton,
+              vouchers.length === 0 && styles.voucherButtonDisabled,
+            ]}
+            onPress={() => setVoucherModalVisible(true)}
+            disabled={vouchers.length === 0}
+          >
+            <View>
+              <Text style={styles.voucherButtonTitle}>
+                {vouchers.length > 0 ? 'Chọn voucher' : 'Bạn chưa có voucher khả dụng'}
+              </Text>
+              <Text style={styles.voucherButtonSubtitle}>
+                {vouchers.length === 0
+                  ? 'Nhận thêm ưu đãi tại mục Voucher'
+                  : availableVouchers.length > 0
+                  ? `${availableVouchers.length} voucher đủ điều kiện`
+                  : 'Đơn hàng hiện chưa đủ giá trị để áp dụng voucher'}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#ee4d2d" />
+          </TouchableOpacity>
+          {selectedVoucher && (
+            <View style={styles.selectedVoucherCard}>
+              <View style={styles.selectedVoucherInfo}>
+                <Text style={styles.selectedVoucherCode}>{selectedVoucher.code}</Text>
+                <Text style={styles.selectedVoucherDesc} numberOfLines={2}>
+                  {selectedVoucher.description}
+                </Text>
+                <Text style={styles.selectedVoucherMeta}>
+                  Đơn tối thiểu {formatCurrency(selectedVoucher.minOrder)}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setSelectedVoucher(null)}>
+                <Text style={styles.removeVoucherText}>Bỏ chọn</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         {/* Payment Method Section */}
@@ -540,10 +745,23 @@ const CheckoutScreen = () => {
               })}
             </Text>
           </View>
+          {voucherDiscountAmount > 0 && (
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>
+                Voucher {selectedVoucher?.code ? `(${selectedVoucher.code})` : ''}
+              </Text>
+              <Text style={[styles.priceValue, styles.discountValue]}>
+                -{voucherDiscountAmount.toLocaleString('vi-VN', {
+                  style: 'currency',
+                  currency: 'VND'
+                })}
+              </Text>
+            </View>
+          )}
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Tổng cộng</Text>
             <Text style={styles.totalPrice}>
-              {calculateTotal().toLocaleString('vi-VN', {
+              {totalWithVoucher.toLocaleString('vi-VN', {
                 style: 'currency',
                 currency: 'VND'
               })}
@@ -564,7 +782,7 @@ const CheckoutScreen = () => {
           ) : (
             <Text style={styles.placeOrderButtonText}>
               {isFormValid() ? 
-                `Đặt đơn • ${calculateTotal().toLocaleString('vi-VN', {
+                `Đặt đơn • ${totalWithVoucher.toLocaleString('vi-VN', {
                   style: 'currency',
                   currency: 'VND'
                 })}` : 

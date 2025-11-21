@@ -35,6 +35,7 @@ const Register = () => {
   const [restaurantName, setRestaurantName] = useState('');
   const [restaurantAddress, setRestaurantAddress] = useState('');
   const [restaurantPhone, setRestaurantPhone] = useState('');
+  const [restaurantOpeningHours, setRestaurantOpeningHours] = useState('08:00 - 22:00');
 
   const handleRegister = async () => {
     if (!username || !email || !password || !confirmPassword) {
@@ -52,7 +53,10 @@ const Register = () => {
       return;
     }
 
-    if (role === 'restaurant' && (!restaurantName.trim() || !restaurantAddress.trim())) {
+    if (
+      role === 'restaurant' &&
+      (!restaurantName.trim() || !restaurantAddress.trim() || !restaurantOpeningHours.trim())
+    ) {
       Alert.alert('Lỗi', 'Vui lòng nhập thông tin nhà hàng.');
       return;
     }
@@ -89,6 +93,7 @@ const Register = () => {
           name: restaurantName.trim(),
           address: restaurantAddress.trim(),
           phone: restaurantPhone.trim(),
+          openingHours: restaurantOpeningHours.trim(),
           image: 'https://cdn-icons-png.flaticon.com/512/3595/3595455.png',
           rating: 4.8,
           createdAt: new Date(),
@@ -240,6 +245,15 @@ const Register = () => {
                     keyboardType="phone-pad"
                     value={restaurantPhone}
                     onChangeText={setRestaurantPhone}
+                  />
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <TextInput
+                    placeholder="Giờ mở cửa (ví dụ: 08:00 - 22:00)"
+                    style={styles.textInput}
+                    value={restaurantOpeningHours}
+                    onChangeText={setRestaurantOpeningHours}
                   />
                 </View>
               </>

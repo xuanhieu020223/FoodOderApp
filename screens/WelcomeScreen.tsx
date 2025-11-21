@@ -48,12 +48,7 @@ const WelcomeScreen = () => {
             <Text style={styles.loginButtonText}>Đăng nhập</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.merchantButton}
-            onPress={() => navigation.navigate('Login', { mode: 'restaurant' })}
-          >
-            <Text style={styles.merchantButtonText}>Dành cho nhà hàng</Text>
-          </TouchableOpacity>
+          
 
           <TouchableOpacity
             style={styles.registerButton}

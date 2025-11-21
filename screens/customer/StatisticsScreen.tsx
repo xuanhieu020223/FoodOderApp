@@ -383,9 +383,17 @@ const StatisticsScreen = () => {
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
     >
-      {/* <View style={styles.header}>
-        <Text style={styles.headerTitle}>Thống kê doanh thu</Text>
-      </View> */}
+      <View style={styles.header}>
+        <View style={styles.headerContent}>
+          <View style={styles.headerIconContainer}>
+            <MaterialIcons name="bar-chart" size={24} color="#ee4d2d" />
+          </View>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerTitle}>Thống kê doanh thu</Text>
+            <Text style={styles.headerSubtitle}>Theo dõi hiệu suất kinh doanh</Text>
+          </View>
+        </View>
+      </View>
 
       <View style={styles.timeFilter}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -537,14 +545,41 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
   },
   header: {
-    backgroundColor: '#ee4d2d',
-    padding: 20,
-    paddingTop: 40,
+    backgroundColor: '#fff',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#fff3f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  headerTextContainer: {
+    flex: 1,
   },
   headerTitle: {
-    color: '#fff',
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 2,
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: '#666',
   },
   loadingContainer: {
     flex: 1,

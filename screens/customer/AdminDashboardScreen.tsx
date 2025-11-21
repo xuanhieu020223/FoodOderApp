@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,12 +8,14 @@ import {
   Alert,
   Image,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { StackNavigationProp } from '@react-navigation/stack';
 import type { AdminStackParamList } from '../../navigation/AdminNavigator';
-import { auth } from '../../config/Firebase';
+import { auth, db } from '../../config/Firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 type AdminNavigationProp = StackNavigationProp<AdminStackParamList>;
 
@@ -62,6 +64,46 @@ const MenuItem: React.FC<MenuItemProps> = ({ title, icon, screen, description, c
 
 const AdminDashboardScreen = () => {
   const navigation = useNavigation<AdminNavigationProp>();
+  const [restaurantInfo, setRestaurantInfo] = useState<{ name: string; image?: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState<string>('restaurant');
+
+  useEffect(() => {
+    loadRestaurantInfo();
+  }, []);
+
+  const loadRestaurantInfo = async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        const role = (userData.role || 'restaurant').toLowerCase();
+        setUserRole(role);
+
+        if (role === 'restaurant') {
+          const restaurantDoc = await getDoc(doc(db, 'restaurants', user.uid));
+          if (restaurantDoc.exists()) {
+            const restaurantData = restaurantDoc.data();
+            setRestaurantInfo({
+              name: restaurantData.name || 'Nhà hàng',
+              image: restaurantData.image,
+            });
+          } else {
+            setRestaurantInfo({ name: userData.name || 'Nhà hàng' });
+          }
+        } else {
+          setRestaurantInfo({ name: userData.name || 'Admin' });
+        }
+      }
+    } catch (error) {
+      console.error('Error loading restaurant info:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -76,12 +118,27 @@ const AdminDashboardScreen = () => {
     }
   };
 
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#ee4d2d" />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <View>
-          <Text style={styles.welcomeText}>Xin chào,</Text>
-          <Text style={styles.adminName}>Admin</Text>
+        <View style={styles.headerInfo}>
+          {restaurantInfo?.image && (
+            <Image source={{ uri: restaurantInfo.image }} style={styles.restaurantAvatar} />
+          )}
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.welcomeText}>Xin chào,</Text>
+            <Text style={styles.restaurantName} numberOfLines={1}>
+              {restaurantInfo?.name || 'Nhà hàng'}
+            </Text>
+          </View>
         </View>
         <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
           <MaterialIcons name="logout" size={24} color="#fff" />
@@ -116,7 +173,7 @@ const AdminDashboardScreen = () => {
           />
         </View>
 
-        <Text style={styles.sectionTitle}>Quản lý cửa hàng</Text>
+        <Text style={styles.sectionTitle}>Quản lý nhà hàng</Text>
         
         <MenuItem
           title="Quản lý đơn hàng"
@@ -142,13 +199,15 @@ const AdminDashboardScreen = () => {
           color="#FF9800"
         />
         
-        <MenuItem
-          title="Quản lý người dùng"
-          icon="people"
-          screen="ManageUsers"
-          description="Quản lý tài khoản khách hàng"
-          color="#9C27B0"
-        />
+        {userRole === 'admin' && (
+          <MenuItem
+            title="Quản lý người dùng"
+            icon="people"
+            screen="ManageUsers"
+            description="Quản lý tài khoản khách hàng"
+            color="#9C27B0"
+          />
+        )}
         
         <MenuItem
           title="Thống kê doanh thu"
@@ -175,15 +234,39 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  headerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  restaurantAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  headerTextContainer: {
+    flex: 1,
+  },
   welcomeText: {
     color: '#fff',
-    opacity: 0.8,
-    fontSize: 16,
+    opacity: 0.9,
+    fontSize: 14,
+    marginBottom: 2,
   },
-  adminName: {
+  restaurantName: {
     color: '#fff',
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
   },
   logoutButton: {
     width: 40,

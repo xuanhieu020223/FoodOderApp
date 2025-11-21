@@ -74,6 +74,7 @@ type Restaurant = {
   rating?: number;
   deliveryTime?: string;
   tags?: string[];
+  openingHours?: string;
 };
 
 const sortOptions: SortOption[] = [
@@ -434,6 +435,11 @@ const HomeScreen = () => {
       <Text style={styles.restaurantCardAddress} numberOfLines={1}>
         {item.address}
       </Text>
+      {item.openingHours && (
+        <Text style={styles.restaurantCardHours} numberOfLines={1}>
+          Giờ mở cửa: {item.openingHours}
+        </Text>
+      )}
     </TouchableOpacity>
   );
 
@@ -667,6 +673,11 @@ const HomeScreen = () => {
                     <Text style={styles.searchRowPrice}>
                       {restaurantItem.rating ? `${restaurantItem.rating.toFixed(1)} ★` : 'Đối tác FoodOrder'}
                     </Text>
+                    {restaurantItem.openingHours && (
+                      <Text style={styles.searchRowHours} numberOfLines={1}>
+                        Giờ mở cửa: {restaurantItem.openingHours}
+                      </Text>
+                    )}
                   </View>
                   <Ionicons name="chevron-forward" size={18} color="#ee4d2d" />
                 </TouchableOpacity>
@@ -937,6 +948,11 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     marginTop: 2,
   },
+  restaurantCardHours: {
+    fontSize: 11,
+    color: '#059669',
+    marginTop: 2,
+  },
   promotionItem: {
     width: width * 0.8,
     height: width * 0.4,
@@ -1183,6 +1199,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#ee4d2d',
     fontWeight: '600',
+  },
+  searchRowHours: {
+    fontSize: 12,
+    color: '#059669',
+    marginTop: 2,
   },
   badge: {
     position: 'absolute',

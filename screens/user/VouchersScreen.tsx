@@ -13,16 +13,17 @@ import { useNavigation } from '@react-navigation/native';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../../config/Firebase';
 
-interface Voucher {
+type Voucher = {
   id: string;
   code: string;
   description: string;
-  discount: number;
+  discountType: 'amount' | 'percent';
+  discountValue: number;
   minOrder: number;
-  maxDiscount: number;
+  maxDiscount?: number;
   expiryDate: Date;
-  isUsed: boolean;
-}
+  isUsed?: boolean;
+};
 
 const VouchersScreen = () => {
   const navigation = useNavigation();
@@ -45,10 +46,27 @@ const VouchersScreen = () => {
       const voucherList: Voucher[] = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data();
+        const discountValue =
+          typeof data.discountValue === 'number'
+            ? data.discountValue
+            : typeof data.discount === 'number'
+            ? data.discount
+            : 0;
+        const discountType: 'amount' | 'percent' =
+          data.discountType === 'percent' || data.discountType === 'amount'
+            ? data.discountType
+            : 'amount';
+
         voucherList.push({
           id: doc.id,
-          ...data,
-          expiryDate: data.expiryDate.toDate(),
+          code: data.code,
+          description: data.description,
+          discountType,
+          discountValue,
+          minOrder: data.minOrder || 0,
+          maxDiscount: data.maxDiscount,
+          expiryDate: data.expiryDate?.toDate ? data.expiryDate.toDate() : new Date(),
+          isUsed: data.isUsed,
         } as Voucher);
       });
 
@@ -80,12 +98,22 @@ const VouchersScreen = () => {
     }).format(amount);
   };
 
+  const getDiscountText = (voucher: Voucher) => {
+    if (voucher.discountType === 'percent') {
+      const maxText = voucher.maxDiscount
+        ? ` (tối đa ${formatCurrency(voucher.maxDiscount)})`
+        : '';
+      return `Giảm ${voucher.discountValue}%${maxText}`;
+    }
+    return `Giảm ${formatCurrency(voucher.discountValue)}`;
+  };
+
   const renderVoucher = ({ item }: { item: Voucher }) => (
     <View style={[styles.voucherCard, item.isUsed && styles.voucherCardUsed]}>
       <View style={styles.voucherLeft}>
         <View style={styles.discountBadge}>
           <Text style={styles.discountText}>
-            Giảm {formatCurrency(item.discount)}
+            {getDiscountText(item)}
           </Text>
         </View>
       </View>

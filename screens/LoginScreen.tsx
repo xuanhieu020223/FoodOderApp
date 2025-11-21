@@ -8,6 +8,7 @@ import {
   TextInput,
   Alert,
   Image,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -16,13 +17,30 @@ import Animated, { FadeInUp } from 'react-native-reanimated';
 import { useNavigation, useRoute, CommonActions } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import { auth, db } from '../config/Firebase';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { collection, query, where, getDocs, getDoc, doc } from 'firebase/firestore';
+import {
+  signInWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithCredential,
+} from 'firebase/auth';
+import { getDoc, doc, setDoc } from 'firebase/firestore';
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
 import { RootStackParamList } from '../app';
-
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type LoginRouteProp = RouteProp<RootStackParamList, 'Login'>;
 type LoginMode = 'customer' | 'restaurant' | 'shipper' | 'admin';
+
+WebBrowser.maybeCompleteAuthSession();
+
+const GOOGLE_LOGIN_ENABLED = false;
+
+const GOOGLE_CLIENT_IDS = {
+  expoClientId: process.env.EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID ?? 'disabled-expo-client-id',
+  iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? 'disabled-ios-client-id',
+  androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ?? 'disabled-android-client-id',
+  webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? 'disabled-web-client-id',
+};
 
 const LogIn = () => {
   const navigation = useNavigation<NavigationProp>();
@@ -32,12 +50,82 @@ const LogIn = () => {
   const [password, setPassword] = useState('');
   const [secureText, setSecureText] = useState(true);
   const [mode, setMode] = useState<LoginMode>(initialMode);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [googleRequest, , promptGoogleLogin] = Google.useAuthRequest(GOOGLE_CLIENT_IDS);
+  const isGoogleConfigured = GOOGLE_LOGIN_ENABLED && Object.values(GOOGLE_CLIENT_IDS).some((value) => !!value);
 
   useEffect(() => {
     if (route.params?.mode) {
       setMode(route.params.mode);
     }
   }, [route.params?.mode]);
+
+  const navigateByRole = (userRole: string) => {
+    const normalizedRole = userRole.toLowerCase();
+    if (normalizedRole === 'admin') {
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: 'AdminApp' }],
+        })
+      );
+      return;
+    }
+
+    if (normalizedRole === 'restaurant') {
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: 'RestaurantApp' }],
+        })
+      );
+      return;
+    }
+
+    if (normalizedRole === 'shipper') {
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 0,
+          routes: [{ name: 'ShipperApp' }],
+        })
+      );
+      return;
+    }
+
+    navigation.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes: [{ name: 'UserApp' }],
+      })
+    );
+  };
+
+  const validateModeWithRole = (userRole: string) => {
+    const normalizedRole = userRole.toLowerCase();
+
+    if (mode === 'restaurant' && normalizedRole !== 'restaurant') {
+      Alert.alert(
+        'Thông báo',
+        'Tài khoản này không thuộc loại Nhà hàng. Vui lòng đăng nhập với tư cách khách hàng.'
+      );
+      return false;
+    }
+
+    if (mode === 'customer' && normalizedRole === 'restaurant') {
+      Alert.alert(
+        'Thông báo',
+        'Tài khoản này thuộc nhà hàng. Vui lòng chọn đăng nhập Nhà hàng.'
+      );
+      return false;
+    }
+
+    if (mode === 'shipper' && normalizedRole !== 'shipper') {
+      Alert.alert('Thông báo', 'Tài khoản này không phải shipper.');
+      return false;
+    }
+
+    return true;
+  };
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -57,51 +145,11 @@ const LogIn = () => {
       const userData = userDoc.data();
       const userRole = (userData.role || 'customer').toLowerCase();
 
-      if (mode === 'restaurant' && userRole !== 'restaurant') {
-        Alert.alert('Thông báo', 'Tài khoản này không thuộc loại Nhà hàng. Vui lòng đăng nhập với tư cách khách hàng.');
+      if (!validateModeWithRole(userRole)) {
         return;
       }
 
-      if (mode === 'customer' && userRole === 'restaurant') {
-        Alert.alert('Thông báo', 'Tài khoản này thuộc nhà hàng. Vui lòng chọn đăng nhập Nhà hàng.');
-        return;
-      }
-
-      if (mode === 'shipper' && userRole !== 'shipper') {
-        Alert.alert('Thông báo', 'Tài khoản này không phải shipper.');
-        return;
-      }
-
-      // Kiểm tra role và điều hướng
-      if (userRole === 'admin') {
-        navigation.dispatch(
-          CommonActions.reset({
-            index: 0,
-            routes: [{ name: 'AdminApp' }],
-          })
-        );
-      } else if (userRole === 'restaurant') {
-        navigation.dispatch(
-          CommonActions.reset({
-            index: 0,
-            routes: [{ name: 'RestaurantApp' }],
-          })
-        );
-      } else if (userRole === 'shipper') {
-        navigation.dispatch(
-          CommonActions.reset({
-            index: 0,
-            routes: [{ name: 'ShipperApp' }],
-          })
-        );
-      } else {
-        navigation.dispatch(
-          CommonActions.reset({
-            index: 0,
-            routes: [{ name: 'UserApp' }],
-          })
-        );
-      }
+      navigateByRole(userRole);
 
       Alert.alert('Thành công', 'Đăng nhập thành công!');
     } catch (error: any) {
@@ -116,8 +164,87 @@ const LogIn = () => {
     }
   };
 
-  const handleGoogleLogin = () => {
-    Alert.alert('Thông báo', 'Tính năng đăng nhập bằng Google sẽ sớm có!');
+  const ensureUserProfile = async (userId: string, payload: { email?: string | null; name?: string | null; photoURL?: string | null; }) => {
+    const userRef = doc(db, 'users', userId);
+    const existingUser = await getDoc(userRef);
+
+    if (existingUser.exists()) {
+      return existingUser.data();
+    }
+
+    const usernameFromEmail = payload.email
+      ? payload.email.split('@')[0]
+      : `user_${userId.slice(0, 6)}`;
+
+    await setDoc(userRef, {
+      uid: userId,
+      email: payload.email?.toLowerCase() ?? '',
+      username: usernameFromEmail,
+      name: payload.name ?? usernameFromEmail,
+      avatar: payload.photoURL ?? null,
+      role: 'customer',
+      provider: 'google',
+      createdAt: new Date(),
+    });
+
+    return (await getDoc(userRef)).data();
+  };
+
+  const signInWithGoogleToken = async (idToken: string) => {
+    const credential = GoogleAuthProvider.credential(idToken);
+    const userCredential = await signInWithCredential(auth, credential);
+    const { user } = userCredential;
+    const userData =
+      (await ensureUserProfile(user.uid, {
+        email: user.email,
+        name: user.displayName,
+        photoURL: user.photoURL,
+      })) || {};
+
+    const userRole = (userData.role || 'customer').toLowerCase();
+    if (!validateModeWithRole(userRole)) {
+      return;
+    }
+
+    navigateByRole(userRole);
+    Alert.alert('Thành công', 'Đăng nhập Google thành công!');
+  };
+
+  const handleGoogleLogin = async () => {
+    if (!GOOGLE_LOGIN_ENABLED) {
+      Alert.alert('Thông báo', 'Đăng nhập Google đang được tạm khóa.');
+      return;
+    }
+
+    if (!isGoogleConfigured) {
+      Alert.alert(
+        'Thiếu cấu hình',
+        'Vui lòng cấu hình Google Client ID trong biến môi trường EXPO_PUBLIC_GOOGLE_* trước khi sử dụng tính năng này.'
+      );
+      return;
+    }
+
+    if (!googleRequest) {
+      Alert.alert('Thông báo', 'Google chưa sẵn sàng, vui lòng thử lại sau.');
+      return;
+    }
+
+    try {
+      setIsGoogleLoading(true);
+      const result = await promptGoogleLogin();
+
+      if (result?.type !== 'success' || !result.authentication?.idToken) {
+        setIsGoogleLoading(false);
+        return;
+      }
+
+      await signInWithGoogleToken(result.authentication.idToken);
+    } catch (error) {
+      console.error('Google login error:', error);
+      Alert.alert('Lỗi', 'Không thể đăng nhập bằng Google. Vui lòng thử lại sau.');
+    } finally {
+      setIsGoogleLoading(false);
+    }
   };
 
   return (
@@ -210,10 +337,22 @@ const LogIn = () => {
             <View style={styles.dividerLine} />
           </View>
 
-          <TouchableOpacity style={styles.googleButton} onPress={handleGoogleLogin}>
-            <AntDesign name="google" size={20} color="#EA4335" style={styles.googleIcon} />
-            <Text style={styles.googleText}>Đăng nhập bằng Google</Text>
-          </TouchableOpacity>
+          {GOOGLE_LOGIN_ENABLED && (
+            <TouchableOpacity
+              style={[styles.googleButton, (!isGoogleConfigured || isGoogleLoading) && styles.googleButtonDisabled]}
+              onPress={handleGoogleLogin}
+              disabled={!isGoogleConfigured || isGoogleLoading}
+            >
+              {isGoogleLoading ? (
+                <ActivityIndicator color="#EA4335" style={styles.googleIcon} />
+              ) : (
+                <AntDesign name="google" size={20} color="#EA4335" style={styles.googleIcon} />
+              )}
+              <Text style={styles.googleText}>
+                {isGoogleConfigured ? 'Đăng nhập bằng Google' : 'Chưa cấu hình Google'}
+              </Text>
+            </TouchableOpacity>
+          )}
 
           <View style={styles.registerContainer}>
             <Text style={styles.registerText}>
@@ -372,6 +511,9 @@ const styles = StyleSheet.create({
   googleText: {
     fontSize: 16,
     color: '#333',
+  },
+  googleButtonDisabled: {
+    opacity: 0.6,
   },
   registerContainer: {
     marginTop: 24,

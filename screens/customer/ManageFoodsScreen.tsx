@@ -692,8 +692,20 @@ const ManageFoodsScreen = () => {
 
   return (
     <View style={styles.container}>
+      {restaurantInfo && (
+        <View style={styles.restaurantHeader}>
+          {restaurantInfo.image && (
+            <Image source={{ uri: restaurantInfo.image }} style={styles.restaurantHeaderImage} />
+          )}
+          <View style={styles.restaurantHeaderInfo}>
+            <Text style={styles.restaurantHeaderName} numberOfLines={1}>
+              {restaurantInfo.name}
+            </Text>
+            <Text style={styles.restaurantHeaderSubtext}>Quản lý món ăn</Text>
+          </View>
+        </View>
+      )}
       <View style={styles.header}>
-       {/* <Text style={styles.headerTitle}>Quản lý món ăn</Text> */}
         <TouchableOpacity
           style={styles.addButton}
           onPress={() => {
@@ -769,10 +781,45 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
+  restaurantHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  restaurantHeaderImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 12,
+    backgroundColor: '#f5f5f5',
+  },
+  restaurantHeaderInfo: {
+    flex: 1,
+  },
+  restaurantHeaderName: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 2,
+  },
+  restaurantHeaderSubtext: {
+    fontSize: 14,
+    color: '#666',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
     padding: 16,
+    backgroundColor: '#fff',
   },
   headerTitle: {
     fontSize: 20,

@@ -317,7 +317,15 @@ const ManageCategoriesScreen = () => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        {/* <Text style={styles.headerTitle}>Quản lý danh mục</Text> */}
+        <View style={styles.headerContent}>
+          <View style={styles.headerIconContainer}>
+            <MaterialIcons name="category" size={24} color="#ee4d2d" />
+          </View>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerTitle}>Quản lý danh mục</Text>
+            <Text style={styles.headerSubtitle}>Sắp xếp và phân loại món ăn</Text>
+          </View>
+        </View>
         <TouchableOpacity
           style={styles.addButton}
           onPress={() => {
@@ -380,11 +388,39 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 12,
+  },
+  headerIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#fff3f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  headerTextContainer: {
+    flex: 1,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
+    marginBottom: 2,
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: '#666',
   },
   addButton: {
     flexDirection: 'row',
