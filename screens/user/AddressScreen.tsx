@@ -6,9 +6,9 @@ import {
   TouchableOpacity,
   FlatList,
   Alert,
-  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import LoadingSpinner from '../../components/LoadingSpinner';
 import { useNavigation, NavigationProp } from '@react-navigation/native';
 import { collection, query, where, getDocs, doc, deleteDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { auth, db } from '../../config/Firebase';
@@ -152,7 +152,7 @@ const AddressScreen = () => {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#ee4d2d" />
+        <LoadingSpinner size="large" color="#ee4d2d" />
       </View>
     );
   }

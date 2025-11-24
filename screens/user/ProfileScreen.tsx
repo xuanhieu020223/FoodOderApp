@@ -8,17 +8,17 @@ import {
   TouchableOpacity,
   Image,
   Alert,
-  ActivityIndicator,
   Modal,
   TextInput,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import LoadingSpinner from '../../components/LoadingSpinner';
 import { useNavigation, CommonActions } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { auth, db } from '../../config/Firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import * as ImagePicker from 'expo-image-picker';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { uploadImageToCloudinary } from '../../utils/cloudinary';
 import { UserStackParamList, TabParamList } from '../../navigation/UserNavigator';
 import { NavigatorScreenParams } from '@react-navigation/native';
 
@@ -32,6 +32,24 @@ interface UserData {
   coins: number;
   vouchers: number;
   favorites: number;
+}
+
+interface Statistics {
+  totalOrders: number;
+  totalSpent: number;
+  completedOrders: number;
+  favoriteRestaurants: number;
+}
+
+interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  color: string;
+  unlocked: boolean;
+  progress?: number;
+  maxProgress?: number;
 }
 
 interface MenuItem {
@@ -92,13 +110,26 @@ const menuItems: MenuItem[] = [
     color: '#00BCD4',
     screen: 'Help',
   },
+  {
+    id: 'chatbot',
+    title: 'Trợ lý AI',
+    icon: 'chatbubble-ellipses',
+    color: '#ee4d2d',
+    screen: 'Chatbot',
+  },
 ];
 
 const ProfileScreen = () => {
   const navigation = useNavigation<NavigationProps>();
-  const storage = getStorage();
   const [loading, setLoading] = useState(true);
   const [userData, setUserData] = useState<UserData | null>(null);
+  const [statistics, setStatistics] = useState<Statistics>({
+    totalOrders: 0,
+    totalSpent: 0,
+    completedOrders: 0,
+    favoriteRestaurants: 0,
+  });
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingName, setEditingName] = useState('');
   const [editingPhone, setEditingPhone] = useState('');
@@ -106,7 +137,15 @@ const ProfileScreen = () => {
 
   useEffect(() => {
     loadUserData();
-  }, []);
+    loadStatistics();
+    loadAchievements();
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadUserData();
+      loadStatistics();
+      loadAchievements();
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   const loadUserData = async () => {
     try {
@@ -133,6 +172,122 @@ const ProfileScreen = () => {
     }
   };
 
+  const loadStatistics = async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+
+      const ordersRef = collection(db, 'orders');
+      const q = query(ordersRef, where('userId', '==', user.uid));
+      const querySnapshot = await getDocs(q);
+
+      let totalOrders = 0;
+      let totalSpent = 0;
+      let completedOrders = 0;
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        totalOrders++;
+        if (data.totalAmount) {
+          totalSpent += data.totalAmount;
+        }
+        if (data.status === 'delivered') {
+          completedOrders++;
+        }
+      });
+
+      // Count favorite restaurants
+      const favoritesRef = collection(db, 'favorites');
+      const favoritesQuery = query(favoritesRef, where('userId', '==', user.uid));
+      const favoritesSnapshot = await getDocs(favoritesQuery);
+      
+      const restaurantIds = new Set<string>();
+      favoritesSnapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.restaurantId) {
+          restaurantIds.add(data.restaurantId);
+        }
+      });
+
+      setStatistics({
+        totalOrders,
+        totalSpent,
+        completedOrders,
+        favoriteRestaurants: restaurantIds.size,
+      });
+    } catch (error) {
+      console.error('Error loading statistics:', error);
+    }
+  };
+
+  const loadAchievements = () => {
+    const userStats = statistics;
+    const allAchievements: Achievement[] = [
+      {
+        id: 'first_order',
+        title: 'Khách hàng đầu tiên',
+        description: 'Đặt đơn hàng đầu tiên',
+        icon: 'star',
+        color: '#FFD700',
+        unlocked: userStats.totalOrders >= 1,
+        progress: Math.min(userStats.totalOrders, 1),
+        maxProgress: 1,
+      },
+      {
+        id: 'regular_customer',
+        title: 'Khách hàng thân thiết',
+        description: 'Hoàn thành 10 đơn hàng',
+        icon: 'trophy',
+        color: '#FF9800',
+        unlocked: userStats.completedOrders >= 10,
+        progress: Math.min(userStats.completedOrders, 10),
+        maxProgress: 10,
+      },
+      {
+        id: 'big_spender',
+        title: 'Người tiêu dùng lớn',
+        description: 'Chi tiêu 1,000,000 đ',
+        icon: 'cash',
+        color: '#4CAF50',
+        unlocked: userStats.totalSpent >= 1000000,
+        progress: Math.min(userStats.totalSpent, 1000000),
+        maxProgress: 1000000,
+      },
+      {
+        id: 'food_lover',
+        title: 'Người yêu ẩm thực',
+        description: 'Yêu thích 5 nhà hàng',
+        icon: 'heart',
+        color: '#E91E63',
+        unlocked: userStats.favoriteRestaurants >= 5,
+        progress: Math.min(userStats.favoriteRestaurants, 5),
+        maxProgress: 5,
+      },
+      {
+        id: 'vip_customer',
+        title: 'Khách hàng VIP',
+        description: 'Hoàn thành 50 đơn hàng',
+        icon: 'diamond',
+        color: '#9C27B0',
+        unlocked: userStats.completedOrders >= 50,
+        progress: Math.min(userStats.completedOrders, 50),
+        maxProgress: 50,
+      },
+    ];
+
+    // Update achievements with current stats
+    setAchievements(allAchievements.map(achievement => ({
+      ...achievement,
+      unlocked: achievement.progress! >= achievement.maxProgress!,
+    })));
+  };
+
+  useEffect(() => {
+    if (statistics.totalOrders > 0) {
+      loadAchievements();
+    }
+  }, [statistics]);
+
   const handleUpdateProfile = async () => {
     try {
       const user = auth.currentUser;
@@ -150,7 +305,6 @@ const ProfileScreen = () => {
       }));
 
       setEditModalVisible(false);
-      Alert.alert('Thành công', 'Đã cập nhật thông tin');
     } catch (error) {
       console.error('Error updating profile:', error);
       Alert.alert('Lỗi', 'Không thể cập nhật thông tin');
@@ -171,24 +325,21 @@ const ProfileScreen = () => {
         if (!user) return;
 
         setUploadingImage(true);
-        const response = await fetch(result.assets[0].uri);
-        const blob = await response.blob();
         
-        const storageRef = ref(storage, `avatars/${user.uid}`);
-        await uploadBytes(storageRef, blob);
-        const downloadURL = await getDownloadURL(storageRef);
+        // Upload image to Cloudinary
+        const imageUrl = await uploadImageToCloudinary(result.assets[0].uri);
 
+        // Save Cloudinary URL to Firebase
         await updateDoc(doc(db, 'users', user.uid), {
-          avatar: downloadURL,
+          avatar: imageUrl,
         });
 
         setUserData(prev => ({
           ...prev!,
-          avatar: downloadURL,
+          avatar: imageUrl,
         }));
 
         setUploadingImage(false);
-        Alert.alert('Thành công', 'Đã cập nhật ảnh đại diện');
       }
     } catch (error) {
       console.error('Error updating avatar:', error);
@@ -230,6 +381,8 @@ const ProfileScreen = () => {
       navigation.navigate('TabNavigator', {
         screen: 'Favorites'
       } as NavigatorScreenParams<TabParamList>);
+    } else if (screen === 'Chatbot') {
+      navigation.navigate('Chatbot');
     } else {
       navigation.navigate(screen);
     }
@@ -238,19 +391,22 @@ const ProfileScreen = () => {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#ee4d2d" />
+        <LoadingSpinner size="large" color="#ee4d2d" />
       </View>
     );
   }
 
+  const unlockedAchievements = achievements.filter(a => a.unlocked).length;
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Profile Header */}
         <View style={styles.headerContainer}>
           <View style={styles.headerContent}>
             <TouchableOpacity style={styles.avatarContainer} onPress={handlePickImage}>
               {uploadingImage ? (
-                <ActivityIndicator size="large" color="#fff" />
+                <LoadingSpinner size="small" color="#fff" />
               ) : (
                 <>
                   <Image
@@ -287,22 +443,23 @@ const ProfileScreen = () => {
             </View>
           </View>
 
+          {/* Statistics Cards */}
           <View style={styles.statsContainer}>
-            <View style={styles.statItem}>
+            <View style={styles.statCard}>
               <View style={[styles.statIconContainer, { backgroundColor: '#FFE0B2' }]}>
                 <Ionicons name="cash-outline" size={24} color="#FF9800" />
               </View>
               <Text style={styles.statValue}>{userData?.coins || 0}</Text>
               <Text style={styles.statLabel}>Xu</Text>
             </View>
-            <View style={styles.statItem}>
+            <View style={styles.statCard}>
               <View style={[styles.statIconContainer, { backgroundColor: '#E1BEE7' }]}>
                 <Ionicons name="ticket" size={24} color="#9C27B0" />
               </View>
               <Text style={styles.statValue}>{userData?.vouchers || 0}</Text>
               <Text style={styles.statLabel}>Voucher</Text>
             </View>
-            <View style={styles.statItem}>
+            <View style={styles.statCard}>
               <View style={[styles.statIconContainer, { backgroundColor: '#FFCDD2' }]}>
                 <Ionicons name="heart" size={24} color="#F44336" />
               </View>
@@ -310,8 +467,110 @@ const ProfileScreen = () => {
               <Text style={styles.statLabel}>Yêu thích</Text>
             </View>
           </View>
+
+          {/* Extended Statistics */}
+          <View style={styles.extendedStatsContainer}>
+            <View style={styles.extendedStatItem}>
+              <MaterialIcons name="receipt-long" size={20} color="#2196F3" />
+              <View style={styles.extendedStatInfo}>
+                <Text style={styles.extendedStatValue}>{statistics.totalOrders}</Text>
+                <Text style={styles.extendedStatLabel}>Tổng đơn hàng</Text>
+              </View>
+            </View>
+            <View style={styles.extendedStatItem}>
+              <MaterialIcons name="attach-money" size={20} color="#4CAF50" />
+              <View style={styles.extendedStatInfo}>
+                <Text style={styles.extendedStatValue}>
+                  {(statistics.totalSpent / 1000).toFixed(0)}K
+                </Text>
+                <Text style={styles.extendedStatLabel}>Tổng chi tiêu</Text>
+              </View>
+            </View>
+            <View style={styles.extendedStatItem}>
+              <MaterialIcons name="check-circle" size={20} color="#FF9800" />
+              <View style={styles.extendedStatInfo}>
+                <Text style={styles.extendedStatValue}>{statistics.completedOrders}</Text>
+                <Text style={styles.extendedStatLabel}>Đơn đã hoàn thành</Text>
+              </View>
+            </View>
+            <View style={styles.extendedStatItem}>
+              <MaterialIcons name="restaurant" size={20} color="#E91E63" />
+              <View style={styles.extendedStatInfo}>
+                <Text style={styles.extendedStatValue}>{statistics.favoriteRestaurants}</Text>
+                <Text style={styles.extendedStatLabel}>Nhà hàng yêu thích</Text>
+              </View>
+            </View>
+          </View>
         </View>
 
+        {/* Achievements Section */}
+        <View style={styles.achievementsContainer}>
+          <View style={styles.sectionHeader}>
+            <MaterialIcons name="emoji-events" size={24} color="#FFD700" />
+            <View style={styles.sectionHeaderText}>
+              <Text style={styles.sectionTitle}>Thành tích</Text>
+              <Text style={styles.sectionSubtitle}>
+                {unlockedAchievements}/{achievements.length} đã mở khóa
+              </Text>
+            </View>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.achievementsScroll}>
+            {achievements.map((achievement) => (
+              <View
+                key={achievement.id}
+                style={[
+                  styles.achievementCard,
+                  !achievement.unlocked && styles.achievementCardLocked,
+                ]}
+              >
+                <View style={[
+                  styles.achievementIcon,
+                  { backgroundColor: achievement.unlocked ? achievement.color : '#E0E0E0' }
+                ]}>
+                  <Ionicons
+                    name={achievement.icon as any}
+                    size={32}
+                    color={achievement.unlocked ? '#fff' : '#999'}
+                  />
+                </View>
+                <Text style={[
+                  styles.achievementTitle,
+                  !achievement.unlocked && styles.achievementTitleLocked
+                ]} numberOfLines={1}>
+                  {achievement.title}
+                </Text>
+                <Text style={styles.achievementDescription} numberOfLines={2}>
+                  {achievement.description}
+                </Text>
+                {achievement.progress !== undefined && achievement.maxProgress !== undefined && (
+                  <View style={styles.achievementProgress}>
+                    <View style={styles.progressBar}>
+                      <View
+                        style={[
+                          styles.progressFill,
+                          {
+                            width: `${(achievement.progress / achievement.maxProgress) * 100}%`,
+                            backgroundColor: achievement.unlocked ? achievement.color : '#E0E0E0',
+                          }
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.progressText}>
+                      {achievement.progress}/{achievement.maxProgress}
+                    </Text>
+                  </View>
+                )}
+                {achievement.unlocked && (
+                  <View style={styles.unlockedBadge}>
+                    <Ionicons name="checkmark-circle" size={16} color={achievement.color} />
+                  </View>
+                )}
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* Menu Items */}
         <View style={styles.menuContainer}>
           {menuItems.map((item, index) => (
             <TouchableOpacity
@@ -396,7 +655,7 @@ const ProfileScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#F5F7FA',
   },
   loadingContainer: {
     flex: 1,
@@ -451,8 +710,8 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: 24,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: 'bold',
+    color: '#1A1A1A',
     marginBottom: 4,
   },
   email: {
@@ -481,9 +740,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     paddingHorizontal: 16,
     paddingTop: 24,
+    marginBottom: 16,
   },
-  statItem: {
+  statCard: {
     alignItems: 'center',
+    flex: 1,
   },
   statIconContainer: {
     width: 48,
@@ -495,13 +756,138 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#333',
+    fontWeight: 'bold',
+    color: '#1A1A1A',
     marginBottom: 4,
   },
   statLabel: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#666',
+  },
+  extendedStatsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  extendedStatItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F7FA',
+    padding: 12,
+    borderRadius: 12,
+    flex: 1,
+    minWidth: '45%',
+    gap: 8,
+  },
+  extendedStatInfo: {
+    flex: 1,
+  },
+  extendedStatValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1A1A1A',
+    marginBottom: 2,
+  },
+  extendedStatLabel: {
+    fontSize: 11,
+    color: '#666',
+  },
+  achievementsContainer: {
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 16,
+    padding: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 12,
+  },
+  sectionHeaderText: {
+    flex: 1,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1A1A1A',
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  achievementsScroll: {
+    marginHorizontal: -16,
+    paddingHorizontal: 16,
+  },
+  achievementCard: {
+    width: 140,
+    backgroundColor: '#F5F7FA',
+    borderRadius: 12,
+    padding: 12,
+    marginRight: 12,
+    alignItems: 'center',
+    position: 'relative',
+  },
+  achievementCardLocked: {
+    opacity: 0.6,
+  },
+  achievementIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  achievementTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1A1A1A',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  achievementTitleLocked: {
+    color: '#999',
+  },
+  achievementDescription: {
+    fontSize: 11,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  achievementProgress: {
+    width: '100%',
+    marginTop: 4,
+  },
+  progressBar: {
+    height: 4,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  progressText: {
+    fontSize: 10,
+    color: '#666',
+    textAlign: 'center',
+  },
+  unlockedBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
   },
   menuContainer: {
     backgroundColor: '#fff',
@@ -623,4 +1009,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ProfileScreen; 
+export default ProfileScreen;

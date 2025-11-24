@@ -1,8 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Linking, RefreshControl } from 'react-native';
+import { 
+  View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator, 
+  Alert, Linking, RefreshControl, Modal, ScrollView, TextInput, Image 
+} from 'react-native';
 import { collection, query, where, getDocs, updateDoc, doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../config/Firebase';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 
 const STATUS_LABELS: any = {
   waiting: 'Chờ nhận đơn',
@@ -14,22 +18,36 @@ const STATUS_LABELS: any = {
 };
 
 const STATUS_COLORS: any = {
-  waiting: '#888',
-  accepted: '#1976d2',
-  picking: '#fbc02d',
-  delivering: '#ee4d2d',
+  waiting: '#FF9800',
+  accepted: '#2196F3',
+  picking: '#FFC107',
+  delivering: '#F44336',
   shipping: '#9C27B0',
-  delivered: '#2e7d32',
+  delivered: '#4CAF50',
+};
+
+const STATUS_ICONS: any = {
+  waiting: 'schedule',
+  accepted: 'check-circle',
+  picking: 'store',
+  delivering: 'local-shipping',
+  shipping: 'assignment',
+  delivered: 'check-circle',
 };
 
 const ShipperOrdersScreen = () => {
+  const navigation = useNavigation();
   const [orders, setOrders] = useState<any[]>([]);
+  const [filteredOrders, setFilteredOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedFilter, setSelectedFilter] = useState<'all' | 'pending' | 'my'>('all');
+  const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [detailsModalVisible, setDetailsModalVisible] = useState(false);
   const user = auth.currentUser;
 
   useEffect(() => {
     fetchOrders();
-    // Setup real-time listener
     const ordersRef = collection(db, 'orders');
     const q = query(
       ordersRef,
@@ -40,7 +58,6 @@ const ShipperOrdersScreen = () => {
       const data: any[] = [];
       snapshot.forEach(docSnap => {
         const d = docSnap.data();
-        // Hiển thị đơn chưa có shipper, đã được gán cho shipper này, hoặc của shipper hiện tại
         if (!d.shipperId || d.shipperId === user?.uid) {
           data.push({ id: docSnap.id, ...d });
         }
@@ -55,11 +72,38 @@ const ShipperOrdersScreen = () => {
     return () => unsubscribe();
   }, [user?.uid]);
 
+  useEffect(() => {
+    filterOrders();
+  }, [orders, searchQuery, selectedFilter]);
+
+  const filterOrders = () => {
+    let filtered = [...orders];
+
+    // Filter by type
+    if (selectedFilter === 'pending') {
+      filtered = filtered.filter(o => !o.shipperId || o.status === 'shipping');
+    } else if (selectedFilter === 'my') {
+      filtered = filtered.filter(o => o.shipperId === user?.uid && o.status !== 'shipping');
+    }
+
+    // Filter by search
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(o => 
+        o.id.toLowerCase().includes(query) ||
+        (o.restaurantName || '').toLowerCase().includes(query) ||
+        (o.customerName || o.fullName || '').toLowerCase().includes(query) ||
+        (o.address || '').toLowerCase().includes(query)
+      );
+    }
+
+    setFilteredOrders(filtered);
+  };
+
   const fetchOrders = async () => {
     setLoading(true);
     try {
       const ordersRef = collection(db, 'orders');
-      // Lấy đơn chưa có shipper, đã được gán (shipping), hoặc đã nhận bởi shipper hiện tại
       const q = query(
         ordersRef,
         where('status', 'in', ['waiting', 'accepted', 'picking', 'delivering', 'shipping']),
@@ -68,7 +112,6 @@ const ShipperOrdersScreen = () => {
       const data: any[] = [];
       snapshot.forEach(docSnap => {
         const d = docSnap.data();
-        // Hiển thị đơn chưa có shipper hoặc của shipper hiện tại
         if (!d.shipperId || d.shipperId === user?.uid) {
           data.push({ id: docSnap.id, ...d });
         }
@@ -86,7 +129,6 @@ const ShipperOrdersScreen = () => {
       const orderRef = doc(db, 'orders', orderId);
       const orderDoc = await getDoc(orderRef);
       
-      // Check if order is already taken
       if (orderDoc.exists()) {
         const orderData = orderDoc.data();
         if (orderData.shipperId && orderData.shipperId !== user?.uid) {
@@ -113,7 +155,7 @@ const ShipperOrdersScreen = () => {
         status: nextStatus,
         [`${nextStatus}At`]: new Date(),
       });
-      fetchOrders();
+      Alert.alert('Thành công', 'Đã cập nhật trạng thái đơn hàng');
     } catch (e) {
       Alert.alert('Lỗi', 'Không thể cập nhật trạng thái.');
     }
@@ -121,7 +163,7 @@ const ShipperOrdersScreen = () => {
 
   const getNextStatus = (status: string) => {
     switch (status) {
-      case 'shipping': return 'accepted'; // Khi nhận đơn từ nhà hàng
+      case 'shipping': return 'accepted';
       case 'accepted': return 'picking';
       case 'picking': return 'delivering';
       case 'delivering': return 'delivered';
@@ -130,18 +172,20 @@ const ShipperOrdersScreen = () => {
   };
 
   const renderActions = (item: any) => {
-    // Nếu đơn chưa có shipper hoặc đã được gán cho shipper này (status = shipping)
     if (!item.shipperId || (item.status === 'shipping' && item.shipperId === user?.uid)) {
       return (
-        <TouchableOpacity style={styles.acceptBtn} onPress={() => acceptOrder(item.id)}>
+        <TouchableOpacity 
+          style={[styles.actionButton, styles.acceptButton]} 
+          onPress={() => acceptOrder(item.id)}
+        >
           <Ionicons name="checkmark-circle" size={20} color="#fff" />
-          <Text style={styles.acceptText}>
+          <Text style={styles.actionButtonText}>
             {item.status === 'shipping' ? 'Xác nhận nhận đơn' : 'Nhận đơn'}
           </Text>
         </TouchableOpacity>
       );
     }
-    // Nếu đơn đã được shipper này nhận
+    
     if (item.shipperId === user?.uid && item.status !== 'delivered') {
       const nextStatus = getNextStatus(item.status);
       if (nextStatus) {
@@ -161,9 +205,12 @@ const ShipperOrdersScreen = () => {
           icon = 'checkmark-done-circle';
         }
         return (
-          <TouchableOpacity style={styles.statusBtn} onPress={() => updateStatus(item.id, nextStatus)}>
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.statusButton]} 
+            onPress={() => updateStatus(item.id, nextStatus)}
+          >
             <Ionicons name={icon as any} size={20} color="#fff" />
-            <Text style={styles.statusText}>{label}</Text>
+            <Text style={styles.actionButtonText}>{label}</Text>
           </TouchableOpacity>
         );
       }
@@ -175,6 +222,141 @@ const ShipperOrdersScreen = () => {
     if (phone) Linking.openURL(`tel:${phone}`);
   };
 
+  const openOrderDetails = (order: any) => {
+    setSelectedOrder(order);
+    setDetailsModalVisible(true);
+  };
+
+  const formatDate = (timestamp: any) => {
+    if (!timestamp) return 'Chưa có';
+    try {
+      const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp.seconds * 1000);
+      return date.toLocaleString('vi-VN', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch (e) {
+      return 'Chưa có';
+    }
+  };
+
+  const renderOrderCard = ({ item }: { item: any }) => {
+    const isPending = !item.shipperId || item.status === 'shipping';
+    const isMyOrder = item.shipperId === user?.uid && item.status !== 'shipping';
+
+    return (
+      <TouchableOpacity 
+        style={[styles.orderCard, isPending && styles.pendingCard, isMyOrder && styles.myCard]}
+        onPress={() => openOrderDetails(item)}
+        activeOpacity={0.8}
+      >
+        <View style={styles.cardHeader}>
+          <View style={styles.orderIdContainer}>
+            <View style={styles.orderIdIcon}>
+              <MaterialIcons name="receipt" size={20} color="#fff" />
+            </View>
+            <Text style={styles.orderId}>#{item.id.slice(-8).toUpperCase()}</Text>
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[item.status] || '#888' }]}>
+            <MaterialIcons 
+              name={STATUS_ICONS[item.status] || 'info'} 
+              size={14} 
+              color="#fff" 
+              style={{ marginRight: 4 }}
+            />
+            <Text style={styles.statusText}>{STATUS_LABELS[item.status] || item.status}</Text>
+          </View>
+        </View>
+        
+        <View style={styles.infoSection}>
+          <View style={styles.infoRow}>
+            <View style={styles.infoIcon}>
+              <MaterialIcons name="store" size={18} color="#FF6B35" />
+            </View>
+            <View style={styles.infoContent}>
+              <Text style={styles.infoLabel}>Nhà hàng</Text>
+              <Text style={styles.infoValue}>{item.restaurantName || 'Chưa có tên'}</Text>
+            </View>
+          </View>
+
+          <View style={styles.infoRow}>
+            <View style={styles.infoIcon}>
+              <MaterialIcons name="location-on" size={18} color="#4A90E2" />
+            </View>
+            <View style={styles.infoContent}>
+              <Text style={styles.infoLabel}>Điểm lấy</Text>
+              <Text style={styles.infoValue} numberOfLines={1}>
+                {item.restaurantAddress || item.address || 'Chưa có địa chỉ'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.infoRow}>
+            <View style={styles.infoIcon}>
+              <MaterialIcons name="person" size={18} color="#7B68EE" />
+            </View>
+            <View style={styles.infoContent}>
+              <Text style={styles.infoLabel}>Khách hàng</Text>
+              <Text style={styles.infoValue}>{item.customerName || item.fullName || 'Chưa có tên'}</Text>
+            </View>
+          </View>
+
+          <View style={styles.infoRow}>
+            <View style={styles.infoIcon}>
+              <MaterialIcons name="place" size={18} color="#F44336" />
+            </View>
+            <View style={styles.infoContent}>
+              <Text style={styles.infoLabel}>Điểm giao</Text>
+              <Text style={styles.infoValue} numberOfLines={1}>
+                {item.address || 'Chưa có địa chỉ'}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.amountSection}>
+          <View style={styles.amountRow}>
+            <MaterialIcons name="attach-money" size={20} color="#4CAF50" />
+            <Text style={styles.amountLabel}>Phí giao hàng:</Text>
+            <Text style={styles.amountValue}>{item.totalAmount?.toLocaleString('vi-VN') || '0'} đ</Text>
+          </View>
+        </View>
+
+        <View style={styles.actionSection}>
+          <TouchableOpacity 
+            style={styles.contactButton}
+            onPress={() => callPhone(item.restaurantPhone || item.phone)}
+          >
+            <Ionicons name="call" size={16} color="#4A90E2" />
+            <Text style={styles.contactButtonText}>Nhà hàng</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.contactButton, styles.customerButton]}
+            onPress={() => callPhone(item.customerPhone || item.phone)}
+          >
+            <Ionicons name="call" size={16} color="#F44336" />
+            <Text style={[styles.contactButtonText, { color: '#F44336' }]}>Khách</Text>
+          </TouchableOpacity>
+          {(item.status === 'accepted' || item.status === 'picking' || item.status === 'delivering' || item.status === 'shipping') && item.shipperId === user?.uid && (
+            <TouchableOpacity
+              style={[styles.contactButton, styles.trackButton]}
+              onPress={() => {
+                navigation.navigate('OrderTracking' as never, { orderId: item.id, userRole: 'shipper' } as never);
+              }}
+            >
+              <Ionicons name="map" size={16} color="#fff" />
+              <Text style={[styles.contactButtonText, { color: '#fff' }]}>Bản đồ</Text>
+            </TouchableOpacity>
+          )}
+          {renderActions(item)}
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   if (loading && orders.length === 0) {
     return (
       <View style={styles.loadingContainer}>
@@ -184,188 +366,225 @@ const ShipperOrdersScreen = () => {
     );
   }
 
-  const pendingOrders = orders.filter(o => !o.shipperId || o.status === 'shipping');
-  const myOrders = orders.filter(o => o.shipperId === user?.uid && o.status !== 'shipping');
+  const pendingOrders = filteredOrders.filter(o => !o.shipperId || o.status === 'shipping');
+  const myOrders = filteredOrders.filter(o => o.shipperId === user?.uid && o.status !== 'shipping');
 
   return (
     <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerContent}>
+        <View style={styles.headerTop}>
           <View style={styles.headerIconContainer}>
-            <MaterialIcons name="delivery-dining" size={24} color="#ee4d2d" />
+            <MaterialIcons name="delivery-dining" size={28} color="#ee4d2d" />
           </View>
           <View style={styles.headerTextContainer}>
             <Text style={styles.headerTitle}>Đơn hàng</Text>
             <Text style={styles.headerSubtitle}>Quản lý đơn giao hàng</Text>
           </View>
         </View>
+
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <MaterialIcons name="search" size={20} color="#666" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Tìm kiếm đơn hàng..."
+            placeholderTextColor="#999"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <MaterialIcons name="clear" size={20} color="#666" />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Filter Tabs */}
+        <View style={styles.filterContainer}>
+          <TouchableOpacity
+            style={[styles.filterTab, selectedFilter === 'all' && styles.filterTabActive]}
+            onPress={() => setSelectedFilter('all')}
+          >
+            <Text style={[styles.filterTabText, selectedFilter === 'all' && styles.filterTabTextActive]}>
+              Tất cả ({filteredOrders.length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterTab, selectedFilter === 'pending' && styles.filterTabActive]}
+            onPress={() => setSelectedFilter('pending')}
+          >
+            <Text style={[styles.filterTabText, selectedFilter === 'pending' && styles.filterTabTextActive]}>
+              Chờ nhận ({pendingOrders.length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterTab, selectedFilter === 'my' && styles.filterTabActive]}
+            onPress={() => setSelectedFilter('my')}
+          >
+            <Text style={[styles.filterTabText, selectedFilter === 'my' && styles.filterTabTextActive]}>
+              Của tôi ({myOrders.length})
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {pendingOrders.length > 0 && (
-        <View style={styles.sectionHeader}>
-          <MaterialIcons name="schedule" size={20} color="#ee4d2d" />
-          <Text style={styles.sectionTitle}>Đơn chờ nhận ({pendingOrders.length})</Text>
-        </View>
-      )}
-
+      {/* Orders List */}
       <FlatList
-        data={pendingOrders}
-        keyExtractor={item => `pending-${item.id}`}
-        renderItem={({ item }) => (
-          <View style={[styles.card, styles.pendingCard]}>
-            <View style={styles.cardHeader}>
-              <View style={styles.orderInfo}>
-                <MaterialIcons name="receipt" size={20} color="#ee4d2d" />
-                <Text style={styles.orderId}>#{item.id.slice(-6).toUpperCase()}</Text>
-              </View>
-              <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[item.status] || '#888' }]}>
-                <Text style={styles.statusText}>{STATUS_LABELS[item.status] || item.status}</Text>
-              </View>
-            </View>
-            
-            <View style={styles.infoSection}>
-              <View style={styles.infoRow}>
-                <MaterialIcons name="store" size={18} color="#666" />
-                <Text style={styles.infoText}>{item.restaurantName || 'Nhà hàng'}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <MaterialIcons name="location-on" size={18} color="#666" />
-                <Text style={styles.infoText} numberOfLines={2}>
-                  Lấy: {item.restaurantAddress || item.address || 'Chưa có địa chỉ'}
-                </Text>
-              </View>
-              <View style={styles.infoRow}>
-                <MaterialIcons name="person" size={18} color="#666" />
-                <Text style={styles.infoText}>{item.customerName || item.fullName || 'Khách hàng'}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <MaterialIcons name="place" size={18} color="#ee4d2d" />
-                <Text style={styles.infoText} numberOfLines={2}>
-                  Giao: {item.address || 'Chưa có địa chỉ'}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.amountRow}>
-              <MaterialIcons name="attach-money" size={20} color="#2e7d32" />
-              <Text style={styles.amount}>Phí giao: {item.totalAmount?.toLocaleString('vi-VN')} đ</Text>
-            </View>
-
-            <View style={styles.actionRow}>
-              <TouchableOpacity 
-                style={styles.iconBtn} 
-                onPress={() => callPhone(item.restaurantPhone || item.phone)}
-              >
-                <Ionicons name="call" size={18} color="#1976d2" />
-                <Text style={styles.iconText}>Nhà hàng</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.iconBtn} 
-                onPress={() => callPhone(item.customerPhone || item.phone)}
-              >
-                <Ionicons name="call" size={18} color="#ee4d2d" />
-                <Text style={styles.iconText}>Khách</Text>
-              </TouchableOpacity>
-              {renderActions(item)}
-            </View>
+        data={selectedFilter === 'all' ? filteredOrders : selectedFilter === 'pending' ? pendingOrders : myOrders}
+        keyExtractor={item => item.id}
+        renderItem={renderOrderCard}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <MaterialIcons name="inbox" size={80} color="#ddd" />
+            <Text style={styles.emptyText}>Không có đơn hàng nào</Text>
+            <Text style={styles.emptySubtext}>
+              {searchQuery ? 'Thử tìm kiếm với từ khóa khác' : 'Kéo xuống để làm mới'}
+            </Text>
           </View>
-        )}
-        ListEmptyComponent={null}
-        refreshing={loading}
-        onRefresh={fetchOrders}
+        }
         refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchOrders} />}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
       />
 
-      {myOrders.length > 0 && (
-        <>
-          <View style={styles.sectionHeader}>
-            <MaterialIcons name="local-shipping" size={20} color="#1976d2" />
-            <Text style={styles.sectionTitle}>Đơn của tôi ({myOrders.length})</Text>
+      {/* Order Details Modal */}
+      <Modal
+        visible={detailsModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setDetailsModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Chi tiết đơn hàng</Text>
+              <TouchableOpacity onPress={() => setDetailsModalVisible(false)}>
+                <MaterialIcons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+              {selectedOrder && (
+                <>
+                  <View style={styles.detailSection}>
+                    <Text style={styles.detailSectionTitle}>Thông tin đơn hàng</Text>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Mã đơn:</Text>
+                      <Text style={styles.detailValue}>#{selectedOrder.id.slice(-8).toUpperCase()}</Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Trạng thái:</Text>
+                      <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[selectedOrder.status] }]}>
+                        <Text style={styles.statusText}>{STATUS_LABELS[selectedOrder.status]}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Thời gian:</Text>
+                      <Text style={styles.detailValue}>{formatDate(selectedOrder.createdAt)}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.detailSection}>
+                    <Text style={styles.detailSectionTitle}>Nhà hàng</Text>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Tên:</Text>
+                      <Text style={styles.detailValue}>{selectedOrder.restaurantName || 'Chưa có'}</Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Địa chỉ:</Text>
+                      <Text style={styles.detailValue}>{selectedOrder.restaurantAddress || 'Chưa có'}</Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>SĐT:</Text>
+                      <TouchableOpacity onPress={() => callPhone(selectedOrder.restaurantPhone)}>
+                        <Text style={[styles.detailValue, styles.phoneLink]}>
+                          {selectedOrder.restaurantPhone || 'Chưa có'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  <View style={styles.detailSection}>
+                    <Text style={styles.detailSectionTitle}>Khách hàng</Text>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Tên:</Text>
+                      <Text style={styles.detailValue}>
+                        {selectedOrder.customerName || selectedOrder.fullName || 'Chưa có'}
+                      </Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Địa chỉ giao:</Text>
+                      <Text style={styles.detailValue}>{selectedOrder.address || 'Chưa có'}</Text>
+                    </View>
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>SĐT:</Text>
+                      <TouchableOpacity onPress={() => callPhone(selectedOrder.customerPhone)}>
+                        <Text style={[styles.detailValue, styles.phoneLink]}>
+                          {selectedOrder.customerPhone || 'Chưa có'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {selectedOrder.items && selectedOrder.items.length > 0 && (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailSectionTitle}>Danh sách món</Text>
+                      {selectedOrder.items.map((item: any, index: number) => (
+                        <View key={index} style={styles.orderItemRow}>
+                          <View style={styles.orderItemInfo}>
+                            {item.imageUrl && (
+                              <Image source={{ uri: item.imageUrl }} style={styles.orderItemImage} />
+                            )}
+                            <View style={styles.orderItemDetails}>
+                              <Text style={styles.orderItemName}>{item.name || 'Món ăn'}</Text>
+                              <Text style={styles.orderItemQuantity}>Số lượng: x{item.quantity || 0}</Text>
+                            </View>
+                          </View>
+                          <Text style={styles.orderItemPrice}>
+                            {((item.price || 0) * (item.quantity || 0)).toLocaleString('vi-VN')} đ
+                          </Text>
+                        </View>
+                      ))}
+                      <View style={styles.totalRow}>
+                        <Text style={styles.totalLabel}>Tổng cộng:</Text>
+                        <Text style={styles.totalValue}>
+                          {selectedOrder.totalAmount?.toLocaleString('vi-VN') || '0'} đ
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {selectedOrder.note && (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailSectionTitle}>Ghi chú</Text>
+                      <Text style={styles.noteText}>{selectedOrder.note}</Text>
+                    </View>
+                  )}
+                </>
+              )}
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.modalButton}
+                onPress={() => setDetailsModalVisible(false)}
+              >
+                <Text style={styles.modalButtonText}>Đóng</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          <FlatList
-            data={myOrders}
-            keyExtractor={item => `my-${item.id}`}
-            renderItem={({ item }) => (
-              <View style={[styles.card, styles.myCard]}>
-                <View style={styles.cardHeader}>
-                  <View style={styles.orderInfo}>
-                    <MaterialIcons name="receipt" size={20} color="#1976d2" />
-                    <Text style={styles.orderId}>#{item.id.slice(-6).toUpperCase()}</Text>
-                  </View>
-                  <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS[item.status] || '#888' }]}>
-                    <Text style={styles.statusText}>{STATUS_LABELS[item.status] || item.status}</Text>
-                  </View>
-                </View>
-                
-                <View style={styles.infoSection}>
-                  <View style={styles.infoRow}>
-                    <MaterialIcons name="store" size={18} color="#666" />
-                    <Text style={styles.infoText}>{item.restaurantName || 'Nhà hàng'}</Text>
-                  </View>
-                  <View style={styles.infoRow}>
-                    <MaterialIcons name="location-on" size={18} color="#666" />
-                    <Text style={styles.infoText} numberOfLines={2}>
-                      Lấy: {item.restaurantAddress || item.address || 'Chưa có địa chỉ'}
-                    </Text>
-                  </View>
-                  <View style={styles.infoRow}>
-                    <MaterialIcons name="person" size={18} color="#666" />
-                    <Text style={styles.infoText}>{item.customerName || item.fullName || 'Khách hàng'}</Text>
-                  </View>
-                  <View style={styles.infoRow}>
-                    <MaterialIcons name="place" size={18} color="#ee4d2d" />
-                    <Text style={styles.infoText} numberOfLines={2}>
-                      Giao: {item.address || 'Chưa có địa chỉ'}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.amountRow}>
-                  <MaterialIcons name="attach-money" size={20} color="#2e7d32" />
-                  <Text style={styles.amount}>Phí giao: {item.totalAmount?.toLocaleString('vi-VN')} đ</Text>
-                </View>
-
-                <View style={styles.actionRow}>
-                  <TouchableOpacity 
-                    style={styles.iconBtn} 
-                    onPress={() => callPhone(item.restaurantPhone || item.phone)}
-                  >
-                    <Ionicons name="call" size={18} color="#1976d2" />
-                    <Text style={styles.iconText}>Nhà hàng</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={styles.iconBtn} 
-                    onPress={() => callPhone(item.customerPhone || item.phone)}
-                  >
-                    <Ionicons name="call" size={18} color="#ee4d2d" />
-                    <Text style={styles.iconText}>Khách</Text>
-                  </TouchableOpacity>
-                  {renderActions(item)}
-                </View>
-              </View>
-            )}
-            ListEmptyComponent={null}
-            refreshing={loading}
-            onRefresh={fetchOrders}
-            refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchOrders} />}
-            contentContainerStyle={{ paddingBottom: 24 }}
-          />
-        </>
-      )}
-
-      {orders.length === 0 && !loading && (
-        <View style={styles.emptyContainer}>
-          <MaterialIcons name="inbox" size={64} color="#ccc" />
-          <Text style={styles.emptyText}>Không có đơn hàng nào</Text>
-          <Text style={styles.emptySubtext}>Kéo xuống để làm mới</Text>
         </View>
-      )}
+      </Modal>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: {
+    flex: 1,
+    backgroundColor: '#F5F7FA',
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -379,24 +598,27 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#fff',
-    padding: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    elevation: 2,
+    borderBottomColor: '#E0E0E0',
+    elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowRadius: 4,
   },
-  headerContent: {
+  headerTop: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 12,
   },
   headerIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#fff3f0',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFF3F0',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -405,70 +627,108 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#1A1A1A',
     marginBottom: 2,
   },
   headerSubtitle: {
     fontSize: 13,
     color: '#666',
   },
-  sectionHeader: {
+  searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginLeft: 8,
-  },
-  card: {
-    backgroundColor: '#fff',
+    backgroundColor: '#F5F5F5',
     borderRadius: 12,
-    padding: 16,
-    marginHorizontal: 16,
+    paddingHorizontal: 12,
     marginBottom: 12,
+    height: 44,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#333',
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  filterTab: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+  },
+  filterTabActive: {
+    backgroundColor: '#ee4d2d',
+  },
+  filterTabText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#666',
+  },
+  filterTabTextActive: {
+    color: '#fff',
+  },
+  listContent: {
+    padding: 16,
+    paddingBottom: 24,
+  },
+  orderCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
+    borderLeftWidth: 4,
+    borderLeftColor: '#4A90E2',
   },
   pendingCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#ee4d2d',
+    borderLeftColor: '#FF9800',
   },
   myCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#1976d2',
+    borderLeftColor: '#2196F3',
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  orderInfo: {
+  orderIdContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  orderIdIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#ee4d2d',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
   },
   orderId: {
     fontWeight: 'bold',
     fontSize: 16,
-    color: '#222',
-    marginLeft: 8,
+    color: '#1A1A1A',
   },
   statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
   statusText: {
     color: '#fff',
@@ -481,91 +741,265 @@ const styles = StyleSheet.create({
   infoRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginBottom: 8,
+    marginBottom: 12,
   },
-  infoText: {
-    fontSize: 14,
-    color: '#444',
-    marginLeft: 8,
+  infoIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F5F5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  infoContent: {
     flex: 1,
+  },
+  infoLabel: {
+    fontSize: 11,
+    color: '#999',
+    marginBottom: 2,
+    textTransform: 'uppercase',
+    fontWeight: '600',
+  },
+  infoValue: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+  },
+  amountSection: {
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+    marginBottom: 12,
   },
   amountRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-    marginBottom: 12,
   },
-  amount: {
-    fontWeight: 'bold',
-    color: '#2e7d32',
-    fontSize: 16,
+  amountLabel: {
+    fontSize: 14,
+    color: '#666',
     marginLeft: 8,
+    marginRight: 8,
   },
-  actionRow: {
+  amountValue: {
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    fontSize: 18,
+  },
+  actionSection: {
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
+    gap: 8,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: '#E0E0E0',
   },
-  iconBtn: {
+  contactButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 16,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    backgroundColor: '#f5f5f5',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#E3F2FD',
     borderRadius: 8,
   },
-  iconText: {
+  customerButton: {
+    backgroundColor: '#FFEBEE',
+  },
+  trackButton: {
+    backgroundColor: '#00BCD4',
+  },
+  contactButtonText: {
     marginLeft: 6,
     fontSize: 13,
-    color: '#222',
-    fontWeight: '500',
+    color: '#4A90E2',
+    fontWeight: '600',
   },
-  acceptBtn: {
+  actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ee4d2d',
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 8,
     marginLeft: 'auto',
   },
-  acceptText: {
+  acceptButton: {
+    backgroundColor: '#ee4d2d',
+  },
+  statusButton: {
+    backgroundColor: '#2196F3',
+  },
+  actionButtonText: {
     color: '#fff',
     fontWeight: 'bold',
     marginLeft: 6,
     fontSize: 14,
   },
-  statusBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1976d2',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    marginLeft: 'auto',
-  },
   emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
+    justifyContent: 'center',
+    padding: 60,
+    marginTop: 40,
   },
   emptyText: {
     fontSize: 16,
     color: '#666',
     marginTop: 16,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   emptySubtext: {
     fontSize: 14,
     color: '#999',
     marginTop: 8,
+    textAlign: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1A1A1A',
+  },
+  modalBody: {
+    padding: 20,
+  },
+  detailSection: {
+    marginBottom: 24,
+  },
+  detailSectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1A1A1A',
+    marginBottom: 12,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  detailLabel: {
+    fontSize: 14,
+    color: '#666',
+    flex: 1,
+  },
+  detailValue: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+    flex: 2,
+    textAlign: 'right',
+  },
+  phoneLink: {
+    color: '#2196F3',
+    textDecorationLine: 'underline',
+  },
+  orderItemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  orderItemInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  orderItemImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  orderItemDetails: {
+    flex: 1,
+  },
+  orderItemName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  orderItemQuantity: {
+    fontSize: 12,
+    color: '#666',
+  },
+  orderItemPrice: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+  },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 12,
+    marginTop: 12,
+    borderTopWidth: 2,
+    borderTopColor: '#E0E0E0',
+  },
+  totalLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  totalValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ee4d2d',
+  },
+  noteText: {
+    fontSize: 14,
+    color: '#666',
+    fontStyle: 'italic',
+    padding: 12,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 8,
+  },
+  modalFooter: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  modalButton: {
+    backgroundColor: '#ee4d2d',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  trackButtonModal: {
+    backgroundColor: '#00BCD4',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  modalButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 

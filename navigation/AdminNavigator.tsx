@@ -12,6 +12,7 @@ import StatisticsScreen from '../screens/customer/StatisticsScreen';
 import AdminDashboardScreen from '../screens/customer/AdminDashboardScreen';
 import PromotionManagementScreen from '../screens/customer/PromotionManagementScreen';
 import SupportCenterScreen from '../screens/customer/SupportCenterScreen';
+import OrderTrackingScreen from '../screens/OrderTrackingScreen';
 
 type AdminStackParamList = {
   AdminDashboard: undefined;
@@ -22,6 +23,7 @@ type AdminStackParamList = {
   Statistics: undefined;
   ManagePromotions: undefined;
   SupportCenter: undefined;
+  OrderTracking: { orderId: string; userRole?: 'customer' | 'shipper' | 'restaurant' };
 };
 
 const Stack = createStackNavigator<AdminStackParamList>();
@@ -112,6 +114,14 @@ const AdminNavigator = () => {
         component={SupportCenterScreen}
         options={{
           title: 'Hỗ trợ & khiếu nại',
+        }}
+      />
+      <Stack.Screen
+        name="OrderTracking"
+        component={OrderTrackingScreen}
+        options={{
+          title: 'Theo dõi đơn hàng',
+          headerShown: false,
         }}
       />
     </Stack.Navigator>

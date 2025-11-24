@@ -11,9 +11,12 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  SafeAreaView,
+  ScrollView,
 } from 'react-native';
-import { Ionicons, Feather, AntDesign } from '@expo/vector-icons';
-import Animated, { FadeInUp } from 'react-native-reanimated';
+import { Ionicons, Feather, AntDesign, MaterialIcons } from '@expo/vector-icons';
+import Animated, { FadeInUp, FadeInDown } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, CommonActions } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import { auth, db } from '../config/Firebase';
@@ -150,8 +153,6 @@ const LogIn = () => {
       }
 
       navigateByRole(userRole);
-
-      Alert.alert('Thành công', 'Đăng nhập thành công!');
     } catch (error: any) {
       console.error('Login error:', error);
       if (error.code === 'auth/invalid-credential') {
@@ -207,7 +208,6 @@ const LogIn = () => {
     }
 
     navigateByRole(userRole);
-    Alert.alert('Thành công', 'Đăng nhập Google thành công!');
   };
 
   const handleGoogleLogin = async () => {
@@ -247,126 +247,277 @@ const LogIn = () => {
     }
   };
 
+  const isRestaurantMode = mode === 'restaurant';
+
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-      <Animated.View style={styles.content} entering={FadeInUp.duration(600)}>
-        <View style={styles.logoContainer}>
-          <Image 
-            source={require('../assets/images/logo.png')} 
-            style={styles.logo}
-            resizeMode="contain"
-          />
-        </View>
-        
-        <Text style={styles.titleText}>
-          {mode === 'restaurant'
-            ? 'Đăng nhập Nhà hàng'
-            : mode === 'shipper'
+      <StatusBar barStyle={isRestaurantMode ? "light-content" : "dark-content"} backgroundColor={isRestaurantMode ? "#ee4d2d" : "#fff"} />
+      {isRestaurantMode ? (
+        <LinearGradient
+          colors={['#ee4d2d', '#ff6b4a', '#ff8c6b']}
+          style={styles.gradientContainer}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          <SafeAreaView style={styles.safeArea}>
+            <ScrollView 
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <Animated.View 
+                style={styles.restaurantContent} 
+                entering={FadeInDown.duration(600).delay(100)}
+              >
+                {/* Logo Section */}
+                <Animated.View 
+                  style={styles.restaurantLogoContainer}
+                  entering={FadeInUp.duration(600).delay(200)}
+                >
+                  <View style={styles.restaurantIconContainer}>
+                    <MaterialIcons name="restaurant" size={48} color="#fff" />
+                  </View>
+                  <Text style={styles.restaurantWelcomeText}>Chào mừng trở lại!</Text>
+                  <Text style={styles.restaurantSubText}>Đăng nhập để quản lý nhà hàng của bạn</Text>
+                </Animated.View>
+
+                {/* Form Card */}
+                <Animated.View 
+                  style={styles.restaurantCard}
+                  entering={FadeInUp.duration(600).delay(300)}
+                >
+                  <View style={styles.restaurantFormContainer}>
+                    {/* Email Input */}
+                    <Animated.View 
+                      style={styles.restaurantInputContainer}
+                      entering={FadeInUp.duration(400).delay(400)}
+                    >
+                      <View style={styles.restaurantInputWrapper}>
+                        <Ionicons name="mail-outline" size={22} color="#ee4d2d" style={styles.inputIcon} />
+                        <TextInput
+                          placeholder="Email nhà hàng"
+                          placeholderTextColor="#999"
+                          style={styles.restaurantTextInput}
+                          value={email}
+                          onChangeText={setEmail}
+                          autoCapitalize="none"
+                          keyboardType="email-address"
+                        />
+                      </View>
+                    </Animated.View>
+
+                    {/* Password Input */}
+                    <Animated.View 
+                      style={styles.restaurantInputContainer}
+                      entering={FadeInUp.duration(400).delay(500)}
+                    >
+                      <View style={styles.restaurantInputWrapper}>
+                        <Ionicons name="lock-closed-outline" size={22} color="#ee4d2d" style={styles.inputIcon} />
+                        <TextInput
+                          placeholder="Mật khẩu"
+                          placeholderTextColor="#999"
+                          style={styles.restaurantTextInput}
+                          secureTextEntry={secureText}
+                          value={password}
+                          onChangeText={setPassword}
+                        />
+                        <TouchableOpacity 
+                          onPress={() => setSecureText(!secureText)} 
+                          style={styles.restaurantEyeIcon}
+                        >
+                          <Feather 
+                            name={secureText ? 'eye-off' : 'eye'} 
+                            size={20} 
+                            color="#666" 
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    </Animated.View>
+
+                    {/* Forgot Password */}
+                    <TouchableOpacity 
+                      style={styles.restaurantForgot}
+                      onPress={() => navigation.navigate('ResetPassword')}
+                    >
+                      <Text style={styles.restaurantForgotText}>Quên mật khẩu?</Text>
+                    </TouchableOpacity>
+
+                    {/* Login Button */}
+                    <Animated.View entering={FadeInUp.duration(400).delay(600)}>
+                      <TouchableOpacity 
+                        style={styles.restaurantLoginButton} 
+                        onPress={handleLogin}
+                        activeOpacity={0.9}
+                      >
+                        <LinearGradient
+                          colors={['#ee4d2d', '#ff6b4a']}
+                          style={styles.restaurantLoginGradient}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
+                        >
+                          <Text style={styles.restaurantLoginButtonText}>Đăng nhập</Text>
+                          <MaterialIcons name="arrow-forward" size={20} color="#fff" />
+                        </LinearGradient>
+                      </TouchableOpacity>
+                    </Animated.View>
+
+                    {/* Mode Switcher */}
+                    <View style={styles.restaurantModeSwitcher}>
+                      <Text style={styles.restaurantModeText}>Bạn là?</Text>
+                      <View style={styles.restaurantModeButtons}>
+                        {[
+                          { label: 'Khách hàng', value: 'customer', icon: 'person-outline' },
+                          { label: 'Nhà hàng', value: 'restaurant', icon: 'restaurant' },
+                          { label: 'Shipper', value: 'shipper', icon: 'local-shipping' },
+                        ].map((option) => (
+                          <TouchableOpacity
+                            key={option.value}
+                            style={[
+                              styles.restaurantModeButton,
+                              mode === option.value && styles.restaurantModeButtonActive,
+                            ]}
+                            onPress={() => setMode(option.value as LoginMode)}
+                          >
+                            <Ionicons 
+                              name={option.icon as any} 
+                              size={18} 
+                              color={mode === option.value ? '#ee4d2d' : '#666'} 
+                            />
+                            <Text
+                              style={[
+                                styles.restaurantModeButtonText,
+                                mode === option.value && styles.restaurantModeButtonTextActive,
+                              ]}
+                            >
+                              {option.label}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+                </Animated.View>
+              </Animated.View>
+            </ScrollView>
+          </SafeAreaView>
+        </LinearGradient>
+      ) : (
+        <Animated.View style={styles.content} entering={FadeInUp.duration(600)}>
+          <View style={styles.logoContainer}>
+            <Image 
+              source={require('../assets/images/logo.png')} 
+              style={styles.logo}
+              resizeMode="contain"
+            />
+          </View>
+          
+          <Text style={styles.titleText}>
+            {mode === 'shipper'
               ? 'Đăng nhập Shipper'
               : 'Đăng Nhập'}
-        </Text>
-        <View style={styles.modeSwitcher}>
-          {[
-            { label: 'Khách hàng', value: 'customer' },
-            { label: 'Nhà hàng', value: 'restaurant' },
-            { label: 'Shipper', value: 'shipper' },
-          ].map((option) => (
-            <TouchableOpacity
-              key={option.value}
-              style={[
-                styles.modeButton,
-                mode === option.value && styles.modeButtonActive,
-              ]}
-              onPress={() => setMode(option.value as LoginMode)}
-            >
-              <Text
+          </Text>
+          <View style={styles.modeSwitcher}>
+            {[
+              { label: 'Khách hàng', value: 'customer' },
+              { label: 'Nhà hàng', value: 'restaurant' },
+              { label: 'Shipper', value: 'shipper' },
+            ].map((option) => (
+              <TouchableOpacity
+                key={option.value}
                 style={[
-                  styles.modeButtonText,
-                  mode === option.value && styles.modeButtonTextActive,
+                  styles.modeButton,
+                  mode === option.value && styles.modeButtonActive,
                 ]}
+                onPress={() => setMode(option.value as LoginMode)}
               >
-                {option.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <View style={styles.formContainer}>
-          <View style={styles.inputContainer}>
-            <TextInput
-              placeholder="Email"
-              style={styles.textInput}
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
+                <Text
+                  style={[
+                    styles.modeButtonText,
+                    mode === option.value && styles.modeButtonTextActive,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
 
-          <View style={styles.inputContainer}>
-            <TextInput
-              placeholder="Mật khẩu"
-              style={styles.textInput}
-              secureTextEntry={secureText}
-              value={password}
-              onChangeText={setPassword}
-            />
-            <TouchableOpacity onPress={() => setSecureText(!secureText)} style={styles.eyeIcon}>
-              <Feather name={secureText ? 'eye-off' : 'eye'} size={20} color="#666" />
-            </TouchableOpacity>
-          </View>
+          <View style={styles.formContainer}>
+            <View style={styles.inputContainer}>
+              <TextInput
+                placeholder="Email"
+                style={styles.textInput}
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
+            </View>
 
-          <TouchableOpacity 
-            style={styles.forgot}
-            onPress={() => navigation.navigate('ResetPassword')}
-          >
-            <Text style={styles.forgotText}>Quên mật khẩu?</Text>
-          </TouchableOpacity>
+            <View style={styles.inputContainer}>
+              <TextInput
+                placeholder="Mật khẩu"
+                style={styles.textInput}
+                secureTextEntry={secureText}
+                value={password}
+                onChangeText={setPassword}
+              />
+              <TouchableOpacity onPress={() => setSecureText(!secureText)} style={styles.eyeIcon}>
+                <Feather name={secureText ? 'eye-off' : 'eye'} size={20} color="#666" />
+              </TouchableOpacity>
+            </View>
 
-          <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-            <Text style={styles.loginButtonText}>Đăng nhập</Text>
-          </TouchableOpacity>
-
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>Hoặc</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          {GOOGLE_LOGIN_ENABLED && (
-            <TouchableOpacity
-              style={[styles.googleButton, (!isGoogleConfigured || isGoogleLoading) && styles.googleButtonDisabled]}
-              onPress={handleGoogleLogin}
-              disabled={!isGoogleConfigured || isGoogleLoading}
+            <TouchableOpacity 
+              style={styles.forgot}
+              onPress={() => navigation.navigate('ResetPassword')}
             >
-              {isGoogleLoading ? (
-                <ActivityIndicator color="#EA4335" style={styles.googleIcon} />
-              ) : (
-                <AntDesign name="google" size={20} color="#EA4335" style={styles.googleIcon} />
-              )}
-              <Text style={styles.googleText}>
-                {isGoogleConfigured ? 'Đăng nhập bằng Google' : 'Chưa cấu hình Google'}
-              </Text>
+              <Text style={styles.forgotText}>Quên mật khẩu?</Text>
             </TouchableOpacity>
-          )}
 
-          <View style={styles.registerContainer}>
-            <Text style={styles.registerText}>
-              Chưa có tài khoản?{' '}
-              <Text
-                style={styles.registerLink}
-                onPress={() => navigation.navigate('Register')}
+            <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
+              <Text style={styles.loginButtonText}>Đăng nhập</Text>
+            </TouchableOpacity>
+
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>Hoặc</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {GOOGLE_LOGIN_ENABLED && (
+              <TouchableOpacity
+                style={[styles.googleButton, (!isGoogleConfigured || isGoogleLoading) && styles.googleButtonDisabled]}
+                onPress={handleGoogleLogin}
+                disabled={!isGoogleConfigured || isGoogleLoading}
               >
-                Đăng ký
+                {isGoogleLoading ? (
+                  <ActivityIndicator color="#EA4335" style={styles.googleIcon} />
+                ) : (
+                  <AntDesign name="google" size={20} color="#EA4335" style={styles.googleIcon} />
+                )}
+                <Text style={styles.googleText}>
+                  {isGoogleConfigured ? 'Đăng nhập bằng Google' : 'Chưa cấu hình Google'}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            <View style={styles.registerContainer}>
+              <Text style={styles.registerText}>
+                Chưa có tài khoản?{' '}
+                <Text
+                  style={styles.registerLink}
+                  onPress={() => navigation.navigate('Register')}
+                >
+                  Đăng ký
+                </Text>
               </Text>
-            </Text>
+            </View>
           </View>
-        </View>
-      </Animated.View>
+        </Animated.View>
+      )}
     </KeyboardAvoidingView>
   );
 };
@@ -526,6 +677,162 @@ const styles = StyleSheet.create({
   registerLink: {
     color: '#ee4d2d',
     fontWeight: '600',
+  },
+  // Restaurant/Admin Login Styles
+  gradientContainer: {
+    flex: 1,
+  },
+  safeArea: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 40,
+  },
+  restaurantContent: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 20,
+  },
+  restaurantLogoContainer: {
+    alignItems: 'center',
+    marginTop: 40,
+    marginBottom: 32,
+  },
+  restaurantIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  restaurantWelcomeText: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  restaurantSubText: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.9)',
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+  restaurantCard: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 24,
+    marginTop: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  restaurantFormContainer: {
+    gap: 20,
+  },
+  restaurantInputContainer: {
+    marginBottom: 4,
+  },
+  restaurantInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F7FA',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1.5,
+    borderColor: '#E0E0E0',
+  },
+  inputIcon: {
+    marginRight: 12,
+  },
+  restaurantTextInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#333',
+    padding: 0,
+  },
+  restaurantEyeIcon: {
+    padding: 4,
+    marginLeft: 8,
+  },
+  restaurantForgot: {
+    alignSelf: 'flex-end',
+    marginTop: -8,
+    marginBottom: 8,
+  },
+  restaurantForgotText: {
+    color: '#ee4d2d',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  restaurantLoginButton: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginTop: 8,
+    marginBottom: 24,
+    shadowColor: '#ee4d2d',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  restaurantLoginGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    gap: 8,
+  },
+  restaurantLoginButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  restaurantModeSwitcher: {
+    marginTop: 8,
+  },
+  restaurantModeText: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 12,
+    fontWeight: '500',
+  },
+  restaurantModeButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  restaurantModeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: '#F5F7FA',
+    borderWidth: 1.5,
+    borderColor: '#E0E0E0',
+    gap: 6,
+  },
+  restaurantModeButtonActive: {
+    backgroundColor: '#FFF3F0',
+    borderColor: '#ee4d2d',
+  },
+  restaurantModeButtonText: {
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '600',
+  },
+  restaurantModeButtonTextActive: {
+    color: '#ee4d2d',
   },
 });
 

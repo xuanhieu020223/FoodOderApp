@@ -7,17 +7,15 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
-  ActivityIndicator,
   Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import LoadingSpinner from '../../components/LoadingSpinner';
 import { useNavigation } from '@react-navigation/native';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../../config/Firebase';
 import * as ImagePicker from 'expo-image-picker';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { seedVouchers } from '../../utils/seedVouchers';
-
+import { uploadImageToCloudinary } from '../../utils/cloudinary';
 
 const AccountInfoScreen = () => {
   const navigation = useNavigation();
@@ -34,9 +32,6 @@ const AccountInfoScreen = () => {
   useEffect(() => {
     loadUserData();
   }, []);
-useEffect(() => {
-  seedVouchers();
-}, []);
   const loadUserData = async () => {
     try {
       const user = auth.currentUser;
@@ -72,7 +67,6 @@ useEffect(() => {
         address: userData.address,
       });
 
-      Alert.alert('Thành công', 'Đã cập nhật thông tin');
       navigation.goBack();
     } catch (error) {
       console.error('Error updating profile:', error);
@@ -94,25 +88,21 @@ useEffect(() => {
         if (!user) return;
 
         setUploading(true);
-        const storage = getStorage();
-        const response = await fetch(result.assets[0].uri);
-        const blob = await response.blob();
         
-        const storageRef = ref(storage, `avatars/${user.uid}`);
-        await uploadBytes(storageRef, blob);
-        const downloadURL = await getDownloadURL(storageRef);
+        // Upload image to Cloudinary
+        const imageUrl = await uploadImageToCloudinary(result.assets[0].uri);
 
+        // Save Cloudinary URL to Firebase
         await updateDoc(doc(db, 'users', user.uid), {
-          avatar: downloadURL,
+          avatar: imageUrl,
         });
 
         setUserData(prev => ({
           ...prev,
-          avatar: downloadURL,
+          avatar: imageUrl,
         }));
 
         setUploading(false);
-        Alert.alert('Thành công', 'Đã cập nhật ảnh đại diện');
       }
     } catch (error) {
       console.error('Error updating avatar:', error);
@@ -124,7 +114,7 @@ useEffect(() => {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#ee4d2d" />
+        <LoadingSpinner size="large" color="#ee4d2d" />
       </View>
     );
   }
@@ -138,7 +128,7 @@ useEffect(() => {
           disabled={uploading}
         >
           {uploading ? (
-            <ActivityIndicator size="small" color="#ee4d2d" />
+            <LoadingSpinner size="small" color="#ee4d2d" />
           ) : (
             <>
               <Image

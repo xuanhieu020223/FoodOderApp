@@ -11,10 +11,13 @@ import {
   ScrollView,
   Image,
   RefreshControl,
+  SafeAreaView,
+  TextInput,
 } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { collection, query, getDocs, doc, updateDoc, where, orderBy, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../config/Firebase';
+import { useNavigation } from '@react-navigation/native';
 
 type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'shipping' | 'delivered' | 'cancelled';
 
@@ -76,6 +79,7 @@ const OrderStatusIcon: Record<OrderStatus, keyof typeof MaterialIcons.glyphMap> 
 };
 
 const ManageOrdersScreen = () => {
+  const navigation = useNavigation();
   const [orders, setOrders] = useState<Order[]>([]);
   const [shippers, setShippers] = useState<Shipper[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,6 +90,7 @@ const ManageOrdersScreen = () => {
   const [assignShipperModalVisible, setAssignShipperModalVisible] = useState(false);
   const [userRole, setUserRole] = useState<'admin' | 'restaurant' | 'staff'>('admin');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const init = async () => {
@@ -512,13 +517,58 @@ const ManageOrdersScreen = () => {
   }
 
   const filteredOrders = statusFilter === 'all'
-    ? orders
-    : orders.filter(order => order.status === statusFilter);
+    ? orders.filter(order => {
+        if (!searchQuery.trim()) return true;
+        const query = searchQuery.toLowerCase();
+        return (
+          order.id.toLowerCase().includes(query) ||
+          (order.customerName || '').toLowerCase().includes(query) ||
+          (order.customerPhone || '').includes(query) ||
+          (order.address || '').toLowerCase().includes(query)
+        );
+      })
+    : orders.filter(order => {
+        if (order.status !== statusFilter) return false;
+        if (!searchQuery.trim()) return true;
+        const query = searchQuery.toLowerCase();
+        return (
+          order.id.toLowerCase().includes(query) ||
+          (order.customerName || '').toLowerCase().includes(query) ||
+          (order.customerPhone || '').includes(query) ||
+          (order.address || '').toLowerCase().includes(query)
+        );
+      });
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Quản lý đơn hàng</Text>
+        <View style={styles.headerTop}>
+          <View style={styles.headerIconContainer}>
+            <MaterialIcons name="receipt-long" size={28} color="#ee4d2d" />
+          </View>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerTitle}>Quản lý đơn hàng</Text>
+            <Text style={styles.headerSubtitle}>Xem và xử lý đơn hàng</Text>
+          </View>
+        </View>
+
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <MaterialIcons name="search" size={20} color="#666" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Tìm kiếm đơn hàng..."
+            placeholderTextColor="#999"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <MaterialIcons name="clear" size={20} color="#666" />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <View style={styles.filterContainer}>
@@ -580,33 +630,76 @@ const ManageOrdersScreen = () => {
 
       <OrderDetailsModal />
       <AssignShipperModal />
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F5F7FA',
   },
   header: {
-    backgroundColor: '#ee4d2d',
-    padding: 20,
-    paddingTop: 40,
+    backgroundColor: '#fff',
+    paddingTop: 16,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  headerIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFF3F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  headerTextContainer: {
+    flex: 1,
   },
   headerTitle: {
-    color: '#fff',
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: 'bold',
+    color: '#1A1A1A',
+    marginBottom: 2,
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: '#666',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 44,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#333',
   },
   filterContainer: {
     backgroundColor: '#fff',
     paddingVertical: 10,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
   },
   filterScroll: {
     paddingHorizontal: 15,
@@ -888,6 +981,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     marginLeft: 5,
+  },
+  trackButton: {
+    backgroundColor: '#00BCD4',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 8,
+    gap: 8,
+    marginBottom: 12,
+  },
+  trackButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   statusSection: {
     flexDirection: 'row',

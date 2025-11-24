@@ -22,6 +22,8 @@ import SettingsScreen from '../screens/user/SettingsScreen';
 import HelpScreen from '../screens/user/HelpScreen';
 import RestaurantListScreen from '../screens/user/RestaurantListScreen';
 import RestaurantDetailScreen from '../screens/user/RestaurantDetailScreen';
+import OrderTrackingScreen from '../screens/OrderTrackingScreen';
+import ChatbotScreen from '../screens/user/ChatbotScreen';
 
 export type TabParamList = {
   Home: undefined;
@@ -51,6 +53,8 @@ export type UserStackParamList = {
   Address: undefined;
   AddAddress: undefined;
   Payment: undefined;
+  OrderTracking: { orderId: string; userRole?: 'customer' | 'shipper' | 'restaurant' };
+  Chatbot: undefined;
 };
 
 const Stack = createNativeStackNavigator<UserStackParamList>();
@@ -143,12 +147,12 @@ const UserNavigator = () => {
       <Stack.Screen
         name="RestaurantDetail"
         component={RestaurantDetailScreen}
-        options={{ title: 'Nhà hàng' }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="RestaurantList"
         component={RestaurantListScreen}
-        options={{ title: 'Danh sách nhà hàng' }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="Cart"
@@ -194,6 +198,20 @@ const UserNavigator = () => {
         name="Help"
         component={HelpScreen}
         options={{ title: 'Trung tâm trợ giúp' }}
+      />
+      <Stack.Screen
+        name="OrderTracking"
+        component={OrderTrackingScreen}
+        options={{ title: 'Theo dõi đơn hàng', headerShown: false }}
+      />
+      <Stack.Screen
+        name="Chatbot"
+        component={ChatbotScreen}
+        options={{ 
+          title: 'Trợ lý AI',
+          headerStyle: { backgroundColor: '#ee4d2d' },
+          headerTintColor: '#fff',
+        }}
       />
     </Stack.Navigator>
   );

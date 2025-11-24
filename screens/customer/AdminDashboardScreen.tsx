@@ -9,6 +9,7 @@ import {
   Image,
   Dimensions,
   ActivityIndicator,
+  SafeAreaView,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -127,22 +128,25 @@ const AdminDashboardScreen = () => {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerInfo}>
-          {restaurantInfo?.image && (
-            <Image source={{ uri: restaurantInfo.image }} style={styles.restaurantAvatar} />
-          )}
+        <View style={styles.headerTop}>
+          <View style={styles.headerIconContainer}>
+            <MaterialIcons name="restaurant-menu" size={28} color="#ee4d2d" />
+          </View>
           <View style={styles.headerTextContainer}>
-            <Text style={styles.welcomeText}>Xin chào,</Text>
-            <Text style={styles.restaurantName} numberOfLines={1}>
+            <Text style={styles.headerTitle}>
               {restaurantInfo?.name || 'Nhà hàng'}
             </Text>
+            <Text style={styles.headerSubtitle}>
+              {userRole === 'admin' ? 'Quản trị hệ thống' : 'Quản lý nhà hàng'}
+            </Text>
           </View>
+          <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+            <MaterialIcons name="logout" size={24} color="#ee4d2d" />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-          <MaterialIcons name="logout" size={24} color="#fff" />
-        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -233,62 +237,65 @@ const AdminDashboardScreen = () => {
           color="#00ACC1"
         />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F5F7FA',
   },
   header: {
-    backgroundColor: '#ee4d2d',
-    padding: 20,
-    paddingTop: 40,
+    backgroundColor: '#fff',
+    paddingTop: 16,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  headerTop: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
   },
-  headerInfo: {
-    flexDirection: 'row',
+  headerIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFF3F0',
+    justifyContent: 'center',
     alignItems: 'center',
-    flex: 1,
-  },
-  restaurantAvatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
     marginRight: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.5)',
   },
   headerTextContainer: {
     flex: 1,
   },
-  welcomeText: {
-    color: '#fff',
-    opacity: 0.9,
-    fontSize: 14,
-    marginBottom: 2,
-  },
-  restaurantName: {
-    color: '#fff',
+  headerTitle: {
     fontSize: 22,
     fontWeight: 'bold',
+    color: '#1A1A1A',
+    marginBottom: 2,
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: '#666',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#fff',
   },
   logoutButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: '#F5F7FA',
     justifyContent: 'center',
     alignItems: 'center',
   },

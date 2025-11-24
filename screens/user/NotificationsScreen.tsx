@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   FlatList,
   TouchableOpacity,
   Image,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -52,6 +53,7 @@ const notifications: Notification[] = [
 
 const NotificationsScreen = () => {
   const [activeTab, setActiveTab] = useState<NotificationType | 'all'>('all');
+  const [notificationsList, setNotificationsList] = useState<Notification[]>(notifications);
 
   const tabs = [
     { id: 'all', label: 'Tất cả' },
@@ -73,12 +75,67 @@ const NotificationsScreen = () => {
     }
   };
 
+  const markAsRead = (id: string) => {
+    setNotificationsList(prev =>
+      prev.map(notif => (notif.id === id ? { ...notif, isRead: true } : notif))
+    );
+  };
+
+  const markAllAsRead = () => {
+    const unreadCount = notificationsList.filter(n => !n.isRead).length;
+    if (unreadCount === 0) {
+      Alert.alert('Thông báo', 'Tất cả thông báo đã được đọc');
+      return;
+    }
+    
+    Alert.alert(
+      'Xác nhận',
+      `Bạn có muốn đánh dấu tất cả ${unreadCount} thông báo là đã đọc?`,
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Đồng ý',
+          onPress: () => {
+            setNotificationsList(prev =>
+              prev.map(notif => ({ ...notif, isRead: true }))
+            );
+          },
+        },
+      ]
+    );
+  };
+
+  const deleteNotification = (id: string) => {
+    Alert.alert(
+      'Xác nhận',
+      'Bạn có muốn xóa thông báo này?',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Xóa',
+          style: 'destructive',
+          onPress: () => {
+            setNotificationsList(prev => prev.filter(notif => notif.id !== id));
+          },
+        },
+      ]
+    );
+  };
+
+  const unreadCount = notificationsList.filter(n => !n.isRead).length;
+
   const renderNotification = ({ item }: { item: Notification }) => (
     <TouchableOpacity
       style={[
         styles.notificationItem,
         !item.isRead && styles.unreadNotification,
       ]}
+      onPress={() => {
+        if (!item.isRead) {
+          markAsRead(item.id);
+        }
+      }}
+      activeOpacity={0.7}
     >
       <View style={styles.notificationContent}>
         {item.image ? (
@@ -93,9 +150,20 @@ const NotificationsScreen = () => {
           </View>
         )}
         <View style={styles.textContainer}>
-          <Text style={styles.notificationTitle} numberOfLines={1}>
-            {item.title}
-          </Text>
+          <View style={styles.titleRow}>
+            <Text style={[
+              styles.notificationTitle,
+              !item.isRead && styles.unreadTitle
+            ]} numberOfLines={1}>
+              {item.title}
+            </Text>
+            <TouchableOpacity
+              style={styles.deleteButton}
+              onPress={() => deleteNotification(item.id)}
+            >
+              <Ionicons name="close" size={18} color="#999" />
+            </TouchableOpacity>
+          </View>
           <Text style={styles.notificationMessage} numberOfLines={2}>
             {item.message}
           </Text>
@@ -106,14 +174,29 @@ const NotificationsScreen = () => {
     </TouchableOpacity>
   );
 
-  const filteredNotifications = notifications.filter(
+  const filteredNotifications = notificationsList.filter(
     notification => activeTab === 'all' || notification.type === activeTab
   );
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Thông báo</Text>
+        <View>
+          <Text style={styles.headerTitle}>Thông báo</Text>
+          {unreadCount > 0 && (
+            <Text style={styles.headerSubtitle}>
+              {unreadCount} thông báo chưa đọc
+            </Text>
+          )}
+        </View>
+        {unreadCount > 0 && (
+          <TouchableOpacity
+            style={styles.markAllButton}
+            onPress={markAllAsRead}
+          >
+            <Text style={styles.markAllButtonText}>Đánh dấu tất cả</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.tabs}>
@@ -175,11 +258,31 @@ const styles = StyleSheet.create({
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '600',
     color: '#333',
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: '#ee4d2d',
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  markAllButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#fff3f0',
+  },
+  markAllButtonText: {
+    fontSize: 12,
+    color: '#ee4d2d',
+    fontWeight: '600',
   },
   tabs: {
     backgroundColor: '#fff',
@@ -248,11 +351,25 @@ const styles = StyleSheet.create({
   textContainer: {
     flex: 1,
   },
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
   notificationTitle: {
     fontSize: 16,
     fontWeight: '500',
     color: '#333',
-    marginBottom: 4,
+    flex: 1,
+  },
+  unreadTitle: {
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  deleteButton: {
+    padding: 4,
+    marginLeft: 8,
   },
   notificationMessage: {
     fontSize: 14,

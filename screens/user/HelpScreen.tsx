@@ -9,6 +9,12 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { UserStackParamList } from '../../navigation/UserNavigator';
+import FloatingChatButton from '../../components/FloatingChatButton';
+
+type NavigationProp = NativeStackNavigationProp<UserStackParamList>;
 
 interface FAQItem {
   id: string;
@@ -77,6 +83,7 @@ const supportChannels = [
 
 const HelpScreen = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const navigation = useNavigation<NavigationProp>();
 
   const handleSupportChannel = async (action: string) => {
     try {
@@ -116,6 +123,21 @@ const HelpScreen = () => {
     <ScrollView style={styles.container}>
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Kênh hỗ trợ</Text>
+        <TouchableOpacity
+          style={styles.channelItem}
+          onPress={() => navigation.navigate('Chatbot')}
+        >
+          <View style={styles.channelInfo}>
+            <View style={[styles.iconContainer, { backgroundColor: '#ee4d2d' }]}>
+              <Ionicons name="chatbubble-ellipses" size={20} color="#fff" />
+            </View>
+            <View>
+              <Text style={styles.channelTitle}>Trợ lý AI</Text>
+              <Text style={styles.channelDescription}>Chat với AI để được hỗ trợ 24/7</Text>
+            </View>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#666" />
+        </TouchableOpacity>
         {supportChannels.map(channel => (
           <TouchableOpacity
             key={channel.id}
@@ -147,6 +169,7 @@ const HelpScreen = () => {
       >
         <Text style={styles.feedbackButtonText}>Gửi phản hồi</Text>
       </TouchableOpacity>
+      <FloatingChatButton />
     </ScrollView>
   );
 };

@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   ScrollView,
   Platform,
+  SafeAreaView,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { collection, query, getDocs, addDoc, updateDoc, deleteDoc, doc, orderBy } from 'firebase/firestore';
@@ -315,27 +316,27 @@ const ManageCategoriesScreen = () => {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerContent}>
+        <View style={styles.headerTop}>
           <View style={styles.headerIconContainer}>
-            <MaterialIcons name="category" size={24} color="#ee4d2d" />
+            <MaterialIcons name="category" size={28} color="#ee4d2d" />
           </View>
           <View style={styles.headerTextContainer}>
             <Text style={styles.headerTitle}>Quản lý danh mục</Text>
             <Text style={styles.headerSubtitle}>Sắp xếp và phân loại món ăn</Text>
           </View>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => {
+              setEditingCategory(null);
+              setModalVisible(true);
+            }}
+          >
+            <MaterialIcons name="add" size={24} color="#fff" />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => {
-            setEditingCategory(null);
-            setModalVisible(true);
-          }}
-        >
-          <MaterialIcons name="add" size={24} color="#fff" />
-          <Text style={styles.addButtonText}>Thêm danh mục</Text>
-        </TouchableOpacity>
       </View>
 
       <SearchBox value={searchQuery} onChangeText={handleSearch} />
@@ -371,40 +372,37 @@ const ManageCategoriesScreen = () => {
         onSave={handleSaveCategory}
         editingCategory={editingCategory}
       />
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F5F7FA',
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
     backgroundColor: '#fff',
+    paddingTop: 16,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    elevation: 2,
+    borderBottomColor: '#E0E0E0',
+    elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowRadius: 4,
   },
-  headerContent: {
+  headerTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
-    marginRight: 12,
   },
   headerIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#fff3f0',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFF3F0',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -413,9 +411,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#1A1A1A',
     marginBottom: 2,
   },
   headerSubtitle: {
@@ -423,17 +421,12 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#ee4d2d',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  addButtonText: {
-    color: '#fff',
-    marginLeft: 8,
-    fontWeight: '500',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   loadingContainer: {
     flex: 1,

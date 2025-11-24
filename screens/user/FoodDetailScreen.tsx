@@ -10,11 +10,12 @@ import {
   Dimensions,
   ActivityIndicator,
   Alert,
+  FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { doc, getDoc, collection, addDoc, query, where, getDocs, updateDoc, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, addDoc, query, where, getDocs, updateDoc, deleteDoc, limit } from 'firebase/firestore';
 import { db, auth } from '../../config/Firebase';
 import { UserStackParamList } from '../../navigation/UserNavigator';
 
@@ -46,6 +47,16 @@ type CartItem = {
   createdAt: Date;
 };
 
+type Review = {
+  id: string;
+  userId: string;
+  userName: string;
+  userAvatar?: string;
+  rating: number;
+  review: string;
+  createdAt: Date;
+};
+
 const { width } = Dimensions.get('window');
 
 const FoodDetailScreen = () => {
@@ -60,11 +71,23 @@ const FoodDetailScreen = () => {
   const [isFavorite, setIsFavorite] = useState(false);
   const [favoriteId, setFavoriteId] = useState<string | null>(null);
   const [restaurant, setRestaurant] = useState<any | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [recommendations, setRecommendations] = useState<Food[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState(false);
+  const [averageRating, setAverageRating] = useState(0);
+  const [totalReviews, setTotalReviews] = useState(0);
 
   useEffect(() => {
     loadFoodDetails();
     checkFavoriteStatus();
+    loadReviews();
   }, [foodId]);
+
+  useEffect(() => {
+    if (food) {
+      loadRecommendations();
+    }
+  }, [food]);
 
   const loadFoodDetails = async () => {
     try {
@@ -88,6 +111,133 @@ const FoodDetailScreen = () => {
       console.error('Error loading food details:', error);
       Alert.alert('Lỗi', 'Không thể tải thông tin món ăn');
       setLoading(false);
+    }
+  };
+
+  const loadReviews = async () => {
+    try {
+      setLoadingReviews(true);
+      const ordersRef = collection(db, 'orders');
+      const ordersSnapshot = await getDocs(
+        query(
+          ordersRef,
+          where('status', '==', 'delivered')
+        )
+      );
+
+      const reviewsData: Review[] = [];
+      let totalRating = 0;
+      let reviewCount = 0;
+
+      for (const orderDoc of ordersSnapshot.docs) {
+        const orderData = orderDoc.data();
+        const items = orderData.items || [];
+        
+        // Check if this order contains the food item
+        const hasFoodItem = items.some((item: any) => item.foodId === foodId);
+        
+        if (hasFoodItem && orderData.rating && orderData.review) {
+          // Get user info
+          let userName = 'Người dùng';
+          let userAvatar = '';
+          
+          try {
+            const userDoc = await getDoc(doc(db, 'users', orderData.userId));
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              userName = userData.name || userData.username || 'Người dùng';
+              userAvatar = userData.avatar || '';
+            }
+          } catch (error) {
+            console.error('Error loading user info:', error);
+          }
+
+          reviewsData.push({
+            id: orderDoc.id,
+            userId: orderData.userId,
+            userName,
+            userAvatar,
+            rating: orderData.rating,
+            review: orderData.review,
+            createdAt: orderData.createdAt?.toDate() || new Date(),
+          });
+
+          totalRating += orderData.rating;
+          reviewCount++;
+        }
+      }
+
+      // Sort by createdAt in memory to avoid needing a composite index
+      reviewsData.sort((a, b) => {
+        const dateA = a.createdAt.getTime();
+        const dateB = b.createdAt.getTime();
+        return dateB - dateA; // Descending order (most recent first)
+      });
+
+      setReviews(reviewsData.slice(0, 10)); // Limit to 10 most recent
+      setTotalReviews(reviewCount);
+      setAverageRating(reviewCount > 0 ? totalRating / reviewCount : 0);
+      setLoadingReviews(false);
+    } catch (error) {
+      console.error('Error loading reviews:', error);
+      setLoadingReviews(false);
+    }
+  };
+
+  const loadRecommendations = async () => {
+    try {
+      if (!food) return;
+
+      const foodsRef = collection(db, 'foods');
+      let recommendationsQuery;
+
+      // Get recommendations from same category or same restaurant
+      if (food.restaurantId) {
+        recommendationsQuery = query(
+          foodsRef,
+          where('restaurantId', '==', food.restaurantId),
+          where('isAvailable', '==', true),
+          limit(6)
+        );
+      } else {
+        recommendationsQuery = query(
+          foodsRef,
+          where('category', '==', food.category),
+          where('isAvailable', '==', true),
+          limit(6)
+        );
+      }
+
+      const snapshot = await getDocs(recommendationsQuery);
+      const recommendationsData: Food[] = [];
+      
+      snapshot.forEach((doc) => {
+        const data = { id: doc.id, ...doc.data() } as Food;
+        if (data.id !== foodId) {
+          recommendationsData.push(data);
+        }
+      });
+
+      // If not enough recommendations, get from same category
+      if (recommendationsData.length < 4 && food.restaurantId) {
+        const categoryQuery = query(
+          foodsRef,
+          where('category', '==', food.category),
+          where('isAvailable', '==', true),
+          limit(6)
+        );
+        const categorySnapshot = await getDocs(categoryQuery);
+        categorySnapshot.forEach((doc) => {
+          const data = { id: doc.id, ...doc.data() } as Food;
+          if (data.id !== foodId && !recommendationsData.find(r => r.id === data.id)) {
+            recommendationsData.push(data);
+          }
+        });
+      }
+
+      setRecommendations(recommendationsData.slice(0, 6));
+    } catch (error) {
+      console.error('Error loading recommendations:', error);
     }
   };
 
@@ -342,7 +492,7 @@ const FoodDetailScreen = () => {
     <SafeAreaView style={styles.container}>
       <ScrollView>
         <View style={styles.imageContainer}>
-          <Image source={{ uri: food.imageUrl }} style={styles.foodImage} />
+          <Image source={{ uri: food.imageUrl }} style={styles.foodImage} resizeMode="cover" />
           <TouchableOpacity 
             style={styles.favoriteButton}
             onPress={toggleFavorite}
@@ -357,6 +507,18 @@ const FoodDetailScreen = () => {
 
         <View style={styles.contentContainer}>
           <Text style={styles.foodName}>{food.name}</Text>
+          
+          {/* Rating Summary */}
+          {totalReviews > 0 && (
+            <View style={styles.ratingSummary}>
+              <View style={styles.ratingStars}>
+                <Ionicons name="star" size={20} color="#fbbf24" />
+                <Text style={styles.ratingNumber}>{averageRating.toFixed(1)}</Text>
+              </View>
+              <Text style={styles.ratingCount}>({totalReviews} đánh giá)</Text>
+            </View>
+          )}
+
           <Text style={styles.foodPrice}>
             {food.price.toLocaleString('vi-VN', {
               style: 'currency',
@@ -372,6 +534,7 @@ const FoodDetailScreen = () => {
               <Image
                 source={{ uri: restaurant.image || food.imageUrl }}
                 style={styles.restaurantImage}
+                resizeMode="cover"
               />
               <View style={styles.restaurantInfo}>
                 <Text style={styles.restaurantName}>{restaurant.name}</Text>
@@ -425,6 +588,97 @@ const FoodDetailScreen = () => {
               })}
             </Text>
           </View>
+
+          {/* Reviews Section */}
+          {reviews.length > 0 && (
+            <View style={styles.reviewsSection}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Đánh giá ({totalReviews})</Text>
+              </View>
+              {loadingReviews ? (
+                <ActivityIndicator size="small" color="#ee4d2d" style={{ marginVertical: 20 }} />
+              ) : (
+                <View>
+                  {reviews.slice(0, 3).map((review) => (
+                    <View key={review.id} style={styles.reviewItem}>
+                      <View style={styles.reviewHeader}>
+                        <View style={styles.reviewUserInfo}>
+                          <View style={styles.reviewAvatar}>
+                            <Text style={styles.reviewAvatarText}>
+                              {review.userName.charAt(0).toUpperCase()}
+                            </Text>
+                          </View>
+                          <View>
+                            <Text style={styles.reviewUserName}>{review.userName}</Text>
+                            <View style={styles.reviewRating}>
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <Ionicons
+                                  key={star}
+                                  name={star <= review.rating ? "star" : "star-outline"}
+                                  size={14}
+                                  color="#fbbf24"
+                                />
+                              ))}
+                            </View>
+                          </View>
+                        </View>
+                        <Text style={styles.reviewDate}>
+                          {review.createdAt.toLocaleDateString('vi-VN')}
+                        </Text>
+                      </View>
+                      <Text style={styles.reviewText}>{review.review}</Text>
+                    </View>
+                  ))}
+                  {reviews.length > 3 && (
+                    <TouchableOpacity style={styles.viewAllReviews}>
+                      <Text style={styles.viewAllReviewsText}>
+                        Xem tất cả {totalReviews} đánh giá
+                      </Text>
+                      <Ionicons name="chevron-forward" size={20} color="#ee4d2d" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Recommendations Section */}
+          {recommendations.length > 0 && (
+            <View style={styles.recommendationsSection}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Món ăn tương tự</Text>
+              </View>
+              <FlatList
+                data={recommendations}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.recommendationCard}
+                    onPress={() => {
+                      navigation.replace('FoodDetail', { foodId: item.id });
+                    }}
+                  >
+                    <Image
+                      source={{ uri: item.imageUrl }}
+                      style={styles.recommendationImage}
+                      resizeMode="cover"
+                    />
+                    <Text style={styles.recommendationName} numberOfLines={2}>
+                      {item.name}
+                    </Text>
+                    <Text style={styles.recommendationPrice}>
+                      {item.price.toLocaleString('vi-VN', {
+                        style: 'currency',
+                        currency: 'VND'
+                      })}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -472,7 +726,6 @@ const styles = StyleSheet.create({
   foodImage: {
     width: width,
     height: width * 0.8,
-    resizeMode: 'cover',
   },
   contentContainer: {
     padding: 16,
@@ -644,6 +897,135 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  ratingSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  ratingStars: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  ratingNumber: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginLeft: 4,
+  },
+  ratingCount: {
+    fontSize: 14,
+    color: '#666',
+  },
+  reviewsSection: {
+    marginTop: 32,
+    marginBottom: 24,
+  },
+  recommendationsSection: {
+    marginTop: 24,
+    marginBottom: 24,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  reviewItem: {
+    backgroundColor: '#f9fafb',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  reviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  reviewUserInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  reviewAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#ee4d2d',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  reviewAvatarText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  reviewUserName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  reviewRating: {
+    flexDirection: 'row',
+  },
+  reviewDate: {
+    fontSize: 12,
+    color: '#999',
+  },
+  reviewText: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 20,
+  },
+  viewAllReviews: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  viewAllReviewsText: {
+    fontSize: 14,
+    color: '#ee4d2d',
+    fontWeight: '600',
+    marginRight: 4,
+  },
+  recommendationCard: {
+    width: 160,
+    marginRight: 12,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#eee',
+  },
+  recommendationImage: {
+    width: '100%',
+    height: 120,
+  },
+  recommendationName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginTop: 8,
+    marginHorizontal: 8,
+    marginBottom: 4,
+  },
+  recommendationPrice: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ee4d2d',
+    marginHorizontal: 8,
+    marginBottom: 12,
   },
 });
 

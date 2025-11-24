@@ -15,6 +15,7 @@ import {
   Platform,
   Keyboard,
   TouchableWithoutFeedback,
+  SafeAreaView,
 } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -618,7 +619,7 @@ const ManageFoodsScreen = () => {
   const renderFoodItem = ({ item }: { item: Food }) => (
     <View style={styles.foodCard}>
       <View style={styles.foodImageContainer}>
-        <Image source={{ uri: item.imageUrl }} style={styles.foodImage} />
+        <Image source={{ uri: item.imageUrl }} style={styles.foodImage} resizeMode="cover" />
       </View>
       
       <View style={styles.foodInfo}>
@@ -691,49 +692,42 @@ const ManageFoodsScreen = () => {
   }
 
   return (
-    <View style={styles.container}>
-      {restaurantInfo && (
-        <View style={styles.restaurantHeader}>
-          {restaurantInfo.image && (
-            <Image source={{ uri: restaurantInfo.image }} style={styles.restaurantHeaderImage} />
-          )}
-          <View style={styles.restaurantHeaderInfo}>
-            <Text style={styles.restaurantHeaderName} numberOfLines={1}>
-              {restaurantInfo.name}
-            </Text>
-            <Text style={styles.restaurantHeaderSubtext}>Quản lý món ăn</Text>
-          </View>
-        </View>
-      )}
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => {
-            setEditingFood(null);
-            setModalVisible(true);
-          }}
-        >
-          <MaterialIcons name="add" size={24} color="#fff" />
-          <Text style={styles.addButtonText}>Thêm món</Text>
-        </TouchableOpacity>
-      </View>
+        <View style={styles.headerTop}>
+          <View style={styles.headerIconContainer}>
+            <MaterialIcons name="restaurant" size={28} color="#ee4d2d" />
+          </View>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerTitle}>Quản lý món ăn</Text>
+            <Text style={styles.headerSubtitle}>Thêm, sửa, xóa món ăn</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => {
+              setEditingFood(null);
+              setModalVisible(true);
+            }}
+          >
+            <MaterialIcons name="add" size={24} color="#fff" />
+          </TouchableOpacity>
+        </View>
 
-      <View style={styles.searchContainer}>
-        <View style={styles.searchInputContainer}>
-          <MaterialIcons name="search" size={24} color="#666" />
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <MaterialIcons name="search" size={20} color="#666" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
             placeholder="Tìm kiếm món ăn..."
+            placeholderTextColor="#999"
             value={searchQuery}
             onChangeText={setSearchQuery}
             returnKeyType="search"
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity
-              onPress={() => setSearchQuery('')}
-              style={styles.clearButton}
-            >
-              <MaterialIcons name="close" size={20} color="#666" />
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <MaterialIcons name="clear" size={20} color="#666" />
             </TouchableOpacity>
           )}
         </View>
@@ -772,90 +766,77 @@ const ManageFoodsScreen = () => {
         editingFood={editingFood}
         categories={categories}
       />
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F5F7FA',
   },
-  restaurantHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  header: {
     backgroundColor: '#fff',
-    padding: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    elevation: 2,
+    borderBottomColor: '#E0E0E0',
+    elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowRadius: 4,
   },
-  restaurantHeaderImage: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  headerIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#FFF3F0',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginRight: 12,
-    backgroundColor: '#f5f5f5',
   },
-  restaurantHeaderInfo: {
+  headerTextContainer: {
     flex: 1,
   },
-  restaurantHeaderName: {
-    fontSize: 18,
+  headerTitle: {
+    fontSize: 22,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#1A1A1A',
     marginBottom: 2,
   },
-  restaurantHeaderSubtext: {
-    fontSize: 14,
+  headerSubtitle: {
+    fontSize: 13,
     color: '#666',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    padding: 16,
-    backgroundColor: '#fff',
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
   addButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#ee4d2d',
-    padding: 12,
-    borderRadius: 8,
-    marginLeft: 12,
-  },
-  addButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   searchContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  searchInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
     paddingHorizontal: 12,
+    height: 44,
+  },
+  searchIcon: {
+    marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    height: 40,
-    marginLeft: 8,
-    fontSize: 16,
+    fontSize: 15,
     color: '#333',
   },
   clearButton: {
@@ -910,7 +891,6 @@ const styles = StyleSheet.create({
   foodImage: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
   },
   foodInfo: {
     flex: 1,

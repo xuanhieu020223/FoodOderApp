@@ -9,6 +9,7 @@ import ShipperNotificationsScreen from '../screens/shipper/ShipperNotificationsS
 import ShipperMapScreen from '../screens/shipper/ShipperMapScreen';
 import ShipperFinanceScreen from '../screens/shipper/ShipperFinanceScreen';
 import ShipperProfileScreen from '../screens/shipper/ShipperProfileScreen';
+import OrderTrackingScreen from '../screens/OrderTrackingScreen';
 
 // Định nghĩa type cho các tab
 export type ShipperTabParamList = {
@@ -21,6 +22,7 @@ export type ShipperTabParamList = {
 
 export type ShipperStackParamList = {
   ShipperTabNavigator: undefined;
+  OrderTracking: { orderId: string; userRole?: 'customer' | 'shipper' | 'restaurant' };
   // Thêm các màn hình chi tiết nếu cần
 };
 
@@ -54,6 +56,11 @@ const ShipperTabNavigator = () => (
 const ShipperNavigator = () => (
   <Stack.Navigator>
     <Stack.Screen name="ShipperTabNavigator" component={ShipperTabNavigator} options={{ headerShown: false }} />
+    <Stack.Screen
+      name="OrderTracking"
+      component={OrderTrackingScreen}
+      options={{ title: 'Theo dõi đơn hàng', headerShown: false }}
+    />
     {/* Thêm các màn hình chi tiết ở đây nếu cần */}
   </Stack.Navigator>
 );

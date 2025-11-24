@@ -11,6 +11,7 @@ import {
   SafeAreaView,
   RefreshControl,
   Dimensions,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -50,8 +51,36 @@ type FavoriteItem = {
 const FavoritesScreen = () => {
   const navigation = useNavigation<NavigationProp>();
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
+  const [filteredFavorites, setFilteredFavorites] = useState<FavoriteItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<'recent' | 'priceAsc' | 'priceDesc'>('recent');
+  const [categories, setCategories] = useState<string[]>([]);
+
+  const applyFilters = (data: FavoriteItem[], category: string | null, sort: 'recent' | 'priceAsc' | 'priceDesc') => {
+    let filtered = [...data];
+    
+    // Filter by category
+    if (category) {
+      filtered = filtered.filter(item => item.food.category === category);
+    }
+    
+    // Sort
+    switch (sort) {
+      case 'recent':
+        filtered.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        break;
+      case 'priceAsc':
+        filtered.sort((a, b) => a.food.price - b.food.price);
+        break;
+      case 'priceDesc':
+        filtered.sort((a, b) => b.food.price - a.food.price);
+        break;
+    }
+    
+    setFilteredFavorites(filtered);
+  };
 
   const loadFavorites = async () => {
     try {
@@ -95,6 +124,12 @@ const FavoritesScreen = () => {
       // Sort by most recently added
       favoritesData.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
       setFavorites(favoritesData);
+      
+      // Extract unique categories
+      const uniqueCategories = Array.from(new Set(favoritesData.map(item => item.food.category)));
+      setCategories(uniqueCategories);
+      
+      applyFilters(favoritesData, selectedCategory, sortBy);
       setLoading(false);
     } catch (error) {
       console.error('Error loading favorites:', error);
@@ -115,10 +150,16 @@ const FavoritesScreen = () => {
     setRefreshing(false);
   };
 
+  useEffect(() => {
+    applyFilters(favorites, selectedCategory, sortBy);
+  }, [selectedCategory, sortBy]);
+
   const removeFavorite = async (favoriteId: string) => {
     try {
       await deleteDoc(doc(db, 'favorites', favoriteId));
-      setFavorites(prev => prev.filter(item => item.id !== favoriteId));
+      const updated = favorites.filter(item => item.id !== favoriteId);
+      setFavorites(updated);
+      applyFilters(updated, selectedCategory, sortBy);
       Alert.alert('Thành công', 'Đã xóa khỏi danh sách yêu thích');
     } catch (error) {
       console.error('Error removing favorite:', error);
@@ -132,7 +173,7 @@ const FavoritesScreen = () => {
       onPress={() => navigation.navigate('FoodDetail', { foodId: item.food.id })}
       activeOpacity={0.7}
     >
-      <Image source={{ uri: item.food.imageUrl }} style={styles.foodImage} />
+      <Image source={{ uri: item.food.imageUrl }} style={styles.foodImage} resizeMode="cover" />
       
       {!item.food.isAvailable && (
         <View style={styles.unavailableBadge}>
@@ -205,7 +246,83 @@ const FavoritesScreen = () => {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Món ăn yêu thích</Text>
+        {favorites.length > 0 && (
+          <Text style={styles.headerSubtitle}>{favorites.length} món đã lưu</Text>
+        )}
       </View>
+
+      {favorites.length > 0 && (
+        <View style={styles.filtersContainer}>
+          {/* Category Filter */}
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            style={styles.categoryScroll}
+            contentContainerStyle={styles.categoryContainer}
+          >
+            <TouchableOpacity
+              style={[
+                styles.categoryChip,
+                selectedCategory === null && styles.categoryChipActive
+              ]}
+              onPress={() => setSelectedCategory(null)}
+            >
+              <Text style={[
+                styles.categoryChipText,
+                selectedCategory === null && styles.categoryChipTextActive
+              ]}>
+                Tất cả
+              </Text>
+            </TouchableOpacity>
+            {categories.map((category) => (
+              <TouchableOpacity
+                key={category}
+                style={[
+                  styles.categoryChip,
+                  selectedCategory === category && styles.categoryChipActive
+                ]}
+                onPress={() => setSelectedCategory(category)}
+              >
+                <Text style={[
+                  styles.categoryChipText,
+                  selectedCategory === category && styles.categoryChipTextActive
+                ]}>
+                  {category}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
+          {/* Sort Options */}
+          <View style={styles.sortContainer}>
+            <Text style={styles.sortLabel}>Sắp xếp:</Text>
+            <TouchableOpacity
+              style={[styles.sortButton, sortBy === 'recent' && styles.sortButtonActive]}
+              onPress={() => setSortBy('recent')}
+            >
+              <Text style={[styles.sortButtonText, sortBy === 'recent' && styles.sortButtonTextActive]}>
+                Mới nhất
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.sortButton, sortBy === 'priceAsc' && styles.sortButtonActive]}
+              onPress={() => setSortBy('priceAsc')}
+            >
+              <Text style={[styles.sortButtonText, sortBy === 'priceAsc' && styles.sortButtonTextActive]}>
+                Giá ↑
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.sortButton, sortBy === 'priceDesc' && styles.sortButtonActive]}
+              onPress={() => setSortBy('priceDesc')}
+            >
+              <Text style={[styles.sortButtonText, sortBy === 'priceDesc' && styles.sortButtonTextActive]}>
+                Giá ↓
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {favorites.length === 0 ? (
         <View style={styles.emptyContainer}>
@@ -218,9 +335,23 @@ const FavoritesScreen = () => {
             <Text style={styles.browseButtonText}>Khám phá món ăn</Text>
           </TouchableOpacity>
         </View>
+      ) : filteredFavorites.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="search-outline" size={80} color="#ddd" />
+          <Text style={styles.emptyText}>Không tìm thấy món ăn nào</Text>
+          <TouchableOpacity
+            style={styles.browseButton}
+            onPress={() => {
+              setSelectedCategory(null);
+              setSortBy('recent');
+            }}
+          >
+            <Text style={styles.browseButtonText}>Xóa bộ lọc</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
         <FlatList
-          data={favorites}
+          data={filteredFavorites}
           renderItem={renderFavoriteItem}
           keyExtractor={item => item.id}
           contentContainerStyle={styles.listContainer}
@@ -249,6 +380,77 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '600',
     color: '#333',
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  filtersContainer: {
+    backgroundColor: '#fff',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  categoryScroll: {
+    maxHeight: 50,
+  },
+  categoryContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  categoryChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f5f5f5',
+    marginRight: 8,
+  },
+  categoryChipActive: {
+    backgroundColor: '#fff3f0',
+    borderWidth: 1,
+    borderColor: '#ee4d2d',
+  },
+  categoryChipText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '500',
+  },
+  categoryChipTextActive: {
+    color: '#ee4d2d',
+    fontWeight: '600',
+  },
+  sortContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  sortLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginRight: 12,
+  },
+  sortButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#f5f5f5',
+    marginRight: 8,
+  },
+  sortButtonActive: {
+    backgroundColor: '#fff3f0',
+    borderWidth: 1,
+    borderColor: '#ee4d2d',
+  },
+  sortButtonText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
+  },
+  sortButtonTextActive: {
+    color: '#ee4d2d',
+    fontWeight: '600',
   },
   loadingContainer: {
     flex: 1,
@@ -300,7 +502,6 @@ const styles = StyleSheet.create({
   foodImage: {
     width: '100%',
     height: width * 0.4,
-    resizeMode: 'cover',
   },
   unavailableBadge: {
     position: 'absolute',
