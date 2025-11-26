@@ -13,6 +13,7 @@ import { collection, query, getDocs, where, orderBy, Timestamp } from 'firebase/
 import { db } from '../../config/Firebase';
 import { LineChart, BarChart } from 'react-native-chart-kit';
 import { MaterialIcons } from '@expo/vector-icons';
+import RestaurantScreenWrapper from '../../components/RestaurantScreenWrapper';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -377,23 +378,23 @@ const StatisticsScreen = () => {
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+    <RestaurantScreenWrapper
+      title="Doanh thu"
+      subtitle="Theo dõi hiệu suất kinh doanh"
+      scrollable={false}
+      rightContent={
+        <TouchableOpacity style={styles.headerIconButton} onPress={onRefresh}>
+          <MaterialIcons name="refresh" size={20} color="#fff" />
+        </TouchableOpacity>
       }
     >
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <View style={styles.headerIconContainer}>
-            <MaterialIcons name="bar-chart" size={24} color="#ee4d2d" />
-          </View>
-          <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>Thống kê doanh thu</Text>
-            <Text style={styles.headerSubtitle}>Theo dõi hiệu suất kinh doanh</Text>
-          </View>
-        </View>
-      </View>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        showsVerticalScrollIndicator={false}
+      >
 
       <View style={styles.timeFilter}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -535,54 +536,25 @@ const StatisticsScreen = () => {
           </View>
         ))}
       </View>
-    </ScrollView>
+      </ScrollView>
+    </RestaurantScreenWrapper>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  header: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#fff3f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  headerTextContainer: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 2,
-  },
-  headerSubtitle: {
-    fontSize: 13,
-    color: '#666',
+  scrollContent: {
+    paddingBottom: 32,
   },
   loadingContainer: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerIconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },

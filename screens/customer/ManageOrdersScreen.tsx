@@ -11,13 +11,13 @@ import {
   ScrollView,
   Image,
   RefreshControl,
-  SafeAreaView,
   TextInput,
 } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { collection, query, getDocs, doc, updateDoc, where, orderBy, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../config/Firebase';
 import { useNavigation } from '@react-navigation/native';
+import RestaurantScreenWrapper from '../../components/RestaurantScreenWrapper';
 
 type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'shipping' | 'delivered' | 'cancelled';
 
@@ -540,152 +540,139 @@ const ManageOrdersScreen = () => {
       });
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <View style={styles.headerIconContainer}>
-            <MaterialIcons name="receipt-long" size={28} color="#ee4d2d" />
-          </View>
-          <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>Quản lý đơn hàng</Text>
-            <Text style={styles.headerSubtitle}>Xem và xử lý đơn hàng</Text>
-          </View>
-        </View>
-
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <MaterialIcons name="search" size={20} color="#666" style={styles.searchIcon} />
+    <>
+      <RestaurantScreenWrapper
+        title="Quản lý đơn hàng"
+        subtitle="Theo dõi & cập nhật trạng thái"
+        scrollable={false}
+        rightContent={
+          <TouchableOpacity style={styles.headerIconButton} onPress={onRefresh}>
+            <MaterialIcons name="refresh" size={20} color="#fff" />
+          </TouchableOpacity>
+        }
+      >
+        <View style={styles.searchCard}>
+          <MaterialIcons name="search" size={20} color="#999" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Tìm kiếm đơn hàng..."
+            placeholder="Tìm kiếm mã đơn, khách hàng, số điện thoại..."
             placeholderTextColor="#999"
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <MaterialIcons name="clear" size={20} color="#666" />
+              <MaterialIcons name="clear" size={20} color="#999" />
             </TouchableOpacity>
           )}
         </View>
-      </View>
 
-      <View style={styles.filterContainer}>
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterScroll}
-        >
-          <TouchableOpacity 
-            style={[
-              styles.filterButton,
-              statusFilter === 'all' && styles.filterButtonActive
-            ]}
-            onPress={() => setStatusFilter('all')}
+        <View style={styles.filterContainer}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterScroll}
           >
-            <Text style={[
-              styles.filterText,
-              statusFilter === 'all' && styles.filterTextActive
-            ]}>Tất cả</Text>
-          </TouchableOpacity>
-          {Object.entries(OrderStatusText).map(([key, value]) => (
-            <TouchableOpacity 
-              key={key}
+            <TouchableOpacity
               style={[
                 styles.filterButton,
-                statusFilter === key && styles.filterButtonActive
+                statusFilter === 'all' && styles.filterButtonActive,
               ]}
-              onPress={() => setStatusFilter(key as OrderStatus)}
+              onPress={() => setStatusFilter('all')}
             >
-              <Text style={[
-                styles.filterText,
-                statusFilter === key && styles.filterTextActive
-              ]}>{value}</Text>
+              <Text
+                style={[
+                  styles.filterText,
+                  statusFilter === 'all' && styles.filterTextActive,
+                ]}
+              >
+                Tất cả
+              </Text>
             </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
+            {Object.entries(OrderStatusText).map(([key, value]) => (
+              <TouchableOpacity
+                key={key}
+                style={[
+                  styles.filterButton,
+                  statusFilter === key && styles.filterButtonActive,
+                ]}
+                onPress={() => setStatusFilter(key as OrderStatus)}
+              >
+                <Text
+                  style={[
+                    styles.filterText,
+                    statusFilter === key && styles.filterTextActive,
+                  ]}
+                >
+                  {value}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
 
-      <FlatList
-        data={filteredOrders}
-        renderItem={renderOrderItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContainer}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        ListEmptyComponent={() => (
-          <View style={styles.emptyContainer}>
-            <MaterialIcons name="inbox" size={64} color="#ccc" />
-            <Text style={styles.emptyText}>
-              {statusFilter === 'all' 
-                ? 'Chưa có đơn hàng nào'
-                : `Không có đơn hàng ${OrderStatusText[statusFilter].toLowerCase()}`
-              }
-            </Text>
-          </View>
-        )}
-      />
+        <View style={styles.listWrapper}>
+          <FlatList
+            data={filteredOrders}
+            renderItem={renderOrderItem}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContainer}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+            ListEmptyComponent={() => (
+              <View style={styles.emptyContainer}>
+                <MaterialIcons name="inbox" size={64} color="#ccc" />
+                <Text style={styles.emptyText}>
+                  {statusFilter === 'all'
+                    ? 'Chưa có đơn hàng nào'
+                    : `Không có đơn hàng ${OrderStatusText[statusFilter].toLowerCase()}`}
+                </Text>
+              </View>
+            )}
+          />
+        </View>
+      </RestaurantScreenWrapper>
 
       <OrderDetailsModal />
       <AssignShipperModal />
-    </SafeAreaView>
+    </>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  loadingContainer: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
-  },
-  header: {
-    backgroundColor: '#fff',
-    paddingTop: 16,
-    paddingBottom: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  headerIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#FFF3F0',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    backgroundColor: '#fff',
   },
-  headerTextContainer: {
-    flex: 1,
+  headerIconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#1A1A1A',
-    marginBottom: 2,
-  },
-  headerSubtitle: {
-    fontSize: 13,
-    color: '#666',
+  searchCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 44,
+    flex: 1,
   },
   searchIcon: {
     marginRight: 8,
@@ -697,12 +684,19 @@ const styles = StyleSheet.create({
   },
   filterContainer: {
     backgroundColor: '#fff',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   filterScroll: {
-    paddingHorizontal: 15,
+    paddingHorizontal: 8,
+    gap: 10,
   },
   filterButton: {
     paddingHorizontal: 16,
@@ -721,13 +715,12 @@ const styles = StyleSheet.create({
   filterTextActive: {
     color: '#fff',
   },
-  loadingContainer: {
+  listWrapper: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   listContainer: {
-    padding: 15,
+    paddingVertical: 12,
+    paddingHorizontal: 2,
   },
   orderCard: {
     backgroundColor: '#fff',

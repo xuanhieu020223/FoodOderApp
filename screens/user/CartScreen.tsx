@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
-  ScrollView,
 } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -16,6 +15,8 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { collection, query, where, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../../config/Firebase';
 import { UserStackParamList } from '../../navigation/UserNavigator';
+import CustomerScreenWrapper from '../../components/CustomerScreenWrapper';
+import FloatingChatButton from '../../components/FloatingChatButton';
 
 type NavigationProp = NativeStackNavigationProp<UserStackParamList>;
 
@@ -250,47 +251,56 @@ const CartScreen = () => {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#ee4d2d" />
-        <Text style={styles.loadingText}>Đang tải giỏ hàng...</Text>
-      </View>
+      <CustomerScreenWrapper gradientHeight={240}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#ee4d2d" />
+          <Text style={styles.loadingText}>Đang tải giỏ hàng...</Text>
+        </View>
+        <FloatingChatButton />
+      </CustomerScreenWrapper>
     );
   }
 
   if (!auth.currentUser) {
     return (
-      <View style={styles.emptyContainer}>
-        <MaterialIcons name="shopping-cart" size={80} color="#ddd" />
-        <Text style={styles.emptyTitle}>Giỏ hàng của bạn</Text>
-        <Text style={styles.emptyText}>
-          Vui lòng đăng nhập để xem giỏ hàng
-        </Text>
-        <TouchableOpacity
-          style={styles.loginButton}
-          onPress={() => navigation.navigate('Login')}
-        >
-          <Text style={styles.loginButtonText}>Đăng nhập</Text>
-        </TouchableOpacity>
-      </View>
+      <CustomerScreenWrapper gradientHeight={240}>
+        <View style={styles.emptyContainer}>
+          <MaterialIcons name="shopping-cart" size={80} color="#ddd" />
+          <Text style={styles.emptyTitle}>Giỏ hàng của bạn</Text>
+          <Text style={styles.emptyText}>
+            Vui lòng đăng nhập để xem giỏ hàng
+          </Text>
+          <TouchableOpacity
+            style={styles.loginButton}
+            onPress={() => navigation.navigate('Login')}
+          >
+            <Text style={styles.loginButtonText}>Đăng nhập</Text>
+          </TouchableOpacity>
+        </View>
+        <FloatingChatButton />
+      </CustomerScreenWrapper>
     );
   }
 
   if (cartItems.length === 0) {
     return (
-      <View style={styles.emptyContainer}>
-        <MaterialIcons name="shopping-cart-outline" size={80} color="#ddd" />
-        <Text style={styles.emptyTitle}>Giỏ hàng trống</Text>
-        <Text style={styles.emptyText}>
-          Thêm món ăn vào giỏ hàng để bắt đầu đặt hàng
-        </Text>
-        <TouchableOpacity
-          style={styles.continueButton}
-          onPress={() => navigation.navigate('TabNavigator', { screen: 'Home' })}
-        >
-          <Ionicons name="restaurant-outline" size={20} color="#fff" />
-          <Text style={styles.continueButtonText}>Tiếp tục mua sắm</Text>
-        </TouchableOpacity>
-      </View>
+      <CustomerScreenWrapper gradientHeight={240}>
+        <View style={styles.emptyContainer}>
+          <Ionicons name="cart-outline" size={80} color="#ddd" />
+          <Text style={styles.emptyTitle}>Giỏ hàng trống</Text>
+          <Text style={styles.emptyText}>
+            Thêm món ăn vào giỏ hàng để bắt đầu đặt hàng
+          </Text>
+          <TouchableOpacity
+            style={styles.continueButton}
+            onPress={() => navigation.navigate('TabNavigator', { screen: 'Home' })}
+          >
+            <Ionicons name="restaurant-outline" size={20} color="#fff" />
+            <Text style={styles.continueButtonText}>Tiếp tục mua sắm</Text>
+          </TouchableOpacity>
+        </View>
+        <FloatingChatButton />
+      </CustomerScreenWrapper>
     );
   }
 
@@ -301,104 +311,107 @@ const CartScreen = () => {
   const remainingForFreeDelivery = MIN_ORDER_FOR_FREE_DELIVERY - subtotal;
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <MaterialIcons name="shopping-cart" size={24} color="#ee4d2d" />
-          <Text style={styles.headerTitle}>Giỏ hàng ({cartItems.length})</Text>
-        </View>
-        <TouchableOpacity
-          style={styles.selectAllContainer}
-          onPress={handleSelectAll}
-        >
-          <View style={[
-            styles.checkbox,
-            selectedItems.length === cartItems.length && styles.checkboxSelected
-          ]}>
-            {selectedItems.length === cartItems.length && (
-              <Ionicons name="checkmark" size={16} color="#fff" />
+    <CustomerScreenWrapper gradientHeight={250}>
+      <>
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <View style={styles.headerContent}>
+              <MaterialIcons name="shopping-cart" size={24} color="#ee4d2d" />
+              <Text style={styles.headerTitle}>Giỏ hàng ({cartItems.length})</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.selectAllContainer}
+              onPress={handleSelectAll}
+            >
+              <View style={[
+                styles.checkbox,
+                selectedItems.length === cartItems.length && styles.checkboxSelected
+              ]}>
+                {selectedItems.length === cartItems.length && (
+                  <Ionicons name="checkmark" size={16} color="#fff" />
+                )}
+              </View>
+              <Text style={styles.selectAllText}>
+                {selectedItems.length === cartItems.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <FlatList
+            data={cartItems}
+            renderItem={renderItem}
+            keyExtractor={item => item.id}
+            contentContainerStyle={styles.listContainer}
+            showsVerticalScrollIndicator={false}
+          />
+          
+          <View style={styles.footer}>
+            {!isFreeDelivery && subtotal > 0 && (
+              <View style={styles.freeDeliveryBanner}>
+                <Ionicons name="gift-outline" size={20} color="#4CAF50" />
+                <Text style={styles.freeDeliveryText}>
+                  Mua thêm {remainingForFreeDelivery.toLocaleString('vi-VN')} đ để được miễn phí vận chuyển
+                </Text>
+              </View>
             )}
-          </View>
-          <Text style={styles.selectAllText}>
-            {selectedItems.length === cartItems.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
-          </Text>
-        </TouchableOpacity>
-      </View>
 
-      <FlatList
-        data={cartItems}
-        renderItem={renderItem}
-        keyExtractor={item => item.id}
-        contentContainerStyle={styles.listContainer}
-        showsVerticalScrollIndicator={false}
-      />
-      
-      <View style={styles.footer}>
-        {/* Free Delivery Banner */}
-        {!isFreeDelivery && subtotal > 0 && (
-          <View style={styles.freeDeliveryBanner}>
-            <Ionicons name="gift-outline" size={20} color="#4CAF50" />
-            <Text style={styles.freeDeliveryText}>
-              Mua thêm {remainingForFreeDelivery.toLocaleString('vi-VN')} đ để được miễn phí vận chuyển
-            </Text>
-          </View>
-        )}
+            {isFreeDelivery && (
+              <View style={styles.freeDeliverySuccess}>
+                <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
+                <Text style={styles.freeDeliverySuccessText}>
+                  Bạn được miễn phí vận chuyển!
+                </Text>
+              </View>
+            )}
 
-        {isFreeDelivery && (
-          <View style={styles.freeDeliverySuccess}>
-            <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
-            <Text style={styles.freeDeliverySuccessText}>
-              Bạn được miễn phí vận chuyển!
-            </Text>
-          </View>
-        )}
-
-        {/* Price Breakdown */}
-        <View style={styles.priceBreakdown}>
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Tạm tính ({selectedItems.length} món):</Text>
-            <Text style={styles.priceValue}>
-              {subtotal.toLocaleString('vi-VN')} đ
-            </Text>
-          </View>
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Phí vận chuyển:</Text>
-            <Text style={[
-              styles.priceValue,
-              deliveryFee === 0 && styles.freeDeliveryPrice
-            ]}>
-              {deliveryFee === 0 ? 'Miễn phí' : `${deliveryFee.toLocaleString('vi-VN')} đ`}
-            </Text>
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Tổng cộng:</Text>
-            <Text style={styles.totalPrice}>
-              {total.toLocaleString('vi-VN')} đ
-            </Text>
+            <View style={styles.priceBreakdown}>
+              <View style={styles.priceRow}>
+                <Text style={styles.priceLabel}>Tạm tính ({selectedItems.length} món):</Text>
+                <Text style={styles.priceValue}>
+                  {subtotal.toLocaleString('vi-VN')} đ
+                </Text>
+              </View>
+              <View style={styles.priceRow}>
+                <Text style={styles.priceLabel}>Phí vận chuyển:</Text>
+                <Text style={[
+                  styles.priceValue,
+                  deliveryFee === 0 && styles.freeDeliveryPrice
+                ]}>
+                  {deliveryFee === 0 ? 'Miễn phí' : `${deliveryFee.toLocaleString('vi-VN')} đ`}
+                </Text>
+              </View>
+              <View style={styles.divider} />
+              <View style={styles.totalRow}>
+                <Text style={styles.totalLabel}>Tổng cộng:</Text>
+                <Text style={styles.totalPrice}>
+                  {total.toLocaleString('vi-VN')} đ
+                </Text>
+              </View>
+            </View>
+            
+            <TouchableOpacity 
+              style={[
+                styles.checkoutButton,
+                selectedItems.length === 0 && styles.checkoutButtonDisabled
+              ]}
+              onPress={handleCheckout}
+              disabled={selectedItems.length === 0}
+            >
+              <View style={styles.checkoutButtonContent}>
+                <Text style={styles.checkoutButtonText}>
+                  Thanh toán ({selectedItems.length})
+                </Text>
+                <Text style={styles.checkoutButtonSubtext}>
+                  {total.toLocaleString('vi-VN')} đ
+                </Text>
+              </View>
+              <Ionicons name="arrow-forward" size={20} color="#fff" />
+            </TouchableOpacity>
           </View>
         </View>
-        
-        <TouchableOpacity 
-          style={[
-            styles.checkoutButton,
-            selectedItems.length === 0 && styles.checkoutButtonDisabled
-          ]}
-          onPress={handleCheckout}
-          disabled={selectedItems.length === 0}
-        >
-          <View style={styles.checkoutButtonContent}>
-            <Text style={styles.checkoutButtonText}>
-              Thanh toán ({selectedItems.length})
-            </Text>
-            <Text style={styles.checkoutButtonSubtext}>
-              {total.toLocaleString('vi-VN')} đ
-            </Text>
-          </View>
-          <Ionicons name="arrow-forward" size={20} color="#fff" />
-        </TouchableOpacity>
-      </View>
-    </View>
+        <FloatingChatButton />
+      </>
+    </CustomerScreenWrapper>
   );
 };
 

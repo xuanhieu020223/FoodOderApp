@@ -13,10 +13,11 @@ import {
   Animated,
   Dimensions,
 } from 'react-native';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Reanimated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { sendMessageToOllama, ChatMessage, checkOllamaConnection } from '../services/ollamaService';
+import BotAvatar from './BotAvatar';
 
 const { width, height } = Dimensions.get('window');
 
@@ -194,12 +195,7 @@ const AIChatbox: React.FC<AIChatboxProps> = ({ visible, onClose }) => {
         {!isUser && (
           <View style={styles.avatarContainer}>
             <View style={styles.avatarGlow} />
-            <LinearGradient
-              colors={['#ee4d2d', '#ff6b4a']}
-              style={styles.avatar}
-            >
-              <MaterialIcons name="smart-toy" size={20} color="#fff" />
-            </LinearGradient>
+            <BotAvatar size={34} showStatus={false} />
           </View>
         )}
         <View
@@ -314,9 +310,7 @@ const AIChatbox: React.FC<AIChatboxProps> = ({ visible, onClose }) => {
                       },
                     ]}
                   />
-                  <View style={styles.headerAvatar}>
-                    <MaterialIcons name="smart-toy" size={24} color="#fff" />
-                  </View>
+                  <BotAvatar size={48} />
                 </View>
                 <View>
                   <Text style={styles.headerTitle}>Trợ lý AI</Text>
@@ -577,13 +571,6 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     backgroundColor: 'rgba(238, 77, 45, 0.15)',
-  },
-  avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   userAvatarContainer: {
     marginLeft: 8,

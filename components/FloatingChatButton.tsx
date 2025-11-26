@@ -6,12 +6,14 @@ import {
   PanResponder,
   useWindowDimensions,
   View,
+  Text,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AIChatbox from './AIChatbox';
+import BotAvatar from './BotAvatar';
+import { palette, shadows } from '../constants/theme';
 
-const BUTTON_SIZE = 64;
+const BUTTON_SIZE = 68;
 
 interface FloatingChatButtonProps {
   bottom?: number;
@@ -131,32 +133,25 @@ const FloatingChatButton: React.FC<FloatingChatButtonProps> = ({
                   {
                     scale: pulseAnim.interpolate({
                       inputRange: [0, 1],
-                      outputRange: [1, 1.8],
+                      outputRange: [1, 1.9],
                     }),
                   },
                 ],
                 opacity: pulseAnim.interpolate({
                   inputRange: [0, 0.7, 1],
-                  outputRange: [0.45, 0.25, 0],
+                  outputRange: [0.4, 0.2, 0],
                 }),
               },
             ]}
           />
-          <TouchableOpacity onPress={handlePress} activeOpacity={0.85}>
+          <TouchableOpacity onPress={handlePress} activeOpacity={0.9}>
             <LinearGradient
-              colors={['#ffe0d2', '#fff6ee']}
+              colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0.2)']}
               style={styles.outerRing}
             >
               <View style={styles.avatarWrapper}>
-                <LinearGradient
-                  colors={['#ff9068', '#ff4b1f']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.avatarCore}
-                >
-                  <MaterialIcons name="smart-toy" size={28} color="#fff" />
-                </LinearGradient>
-                <View style={styles.sparkle} />
+                <BotAvatar size={BUTTON_SIZE} />
+                <Text style={styles.avatarLabel}>Chat AI</Text>
               </View>
             </LinearGradient>
           </TouchableOpacity>
@@ -180,41 +175,32 @@ const styles = StyleSheet.create({
     backgroundColor: '#ff7a45',
   },
   outerRing: {
-    width: BUTTON_SIZE + 10,
-    height: BUTTON_SIZE + 10,
-    borderRadius: (BUTTON_SIZE + 10) / 2,
-    padding: 5,
-    shadowColor: '#ff8a65',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 10,
+    width: BUTTON_SIZE + 18,
+    height: BUTTON_SIZE + 18,
+    borderRadius: (BUTTON_SIZE + 18) / 2,
+    padding: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.4)',
+    ...shadows.floating,
   },
   avatarWrapper: {
     width: '100%',
     height: '100%',
-    borderRadius: (BUTTON_SIZE + 10) / 2,
-    backgroundColor: '#fff',
+    borderRadius: (BUTTON_SIZE + 18) / 2,
+    backgroundColor: 'rgba(255,255,255,0.75)',
     padding: 6,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  avatarCore: {
-    width: '100%',
-    height: '100%',
-    borderRadius: BUTTON_SIZE / 2,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sparkle: {
+  avatarLabel: {
     position: 'absolute',
-    top: 10,
-    right: 14,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#fff',
-    opacity: 0.35,
+    bottom: -18,
+    fontSize: 12,
+    fontWeight: '600',
+    color: palette.neutral100,
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
 });
 

@@ -15,12 +15,12 @@ import {
   Platform,
   Keyboard,
   TouchableWithoutFeedback,
-  SafeAreaView,
 } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { collection, query, getDocs, doc, addDoc, updateDoc, deleteDoc, where, getDoc } from 'firebase/firestore';
 import { auth, db } from '../../config/Firebase';
+import RestaurantScreenWrapper from '../../components/RestaurantScreenWrapper';
 
 // Cloudinary configuration
 const CLOUDINARY_URL = 'https://api.cloudinary.com/v1_1/dsbhlgu9c/upload';
@@ -692,34 +692,28 @@ const ManageFoodsScreen = () => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <View style={styles.headerIconContainer}>
-            <MaterialIcons name="restaurant" size={28} color="#ee4d2d" />
-          </View>
-          <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>Quản lý món ăn</Text>
-            <Text style={styles.headerSubtitle}>Thêm, sửa, xóa món ăn</Text>
-          </View>
+    <>
+      <RestaurantScreenWrapper
+        title="Quản lý thực đơn"
+        subtitle="Thêm, sửa, xóa món ăn"
+        scrollable={false}
+        rightContent={
           <TouchableOpacity
-            style={styles.addButton}
+            style={styles.headerIconButton}
             onPress={() => {
               setEditingFood(null);
               setModalVisible(true);
             }}
           >
-            <MaterialIcons name="add" size={24} color="#fff" />
+            <MaterialIcons name="add" size={22} color="#fff" />
           </TouchableOpacity>
-        </View>
-
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <MaterialIcons name="search" size={20} color="#666" style={styles.searchIcon} />
+        }
+      >
+        <View style={styles.searchCard}>
+          <MaterialIcons name="search" size={20} color="#999" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Tìm kiếm món ăn..."
+            placeholder="Tìm kiếm món ăn hoặc danh mục..."
             placeholderTextColor="#999"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -727,34 +721,30 @@ const ManageFoodsScreen = () => {
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <MaterialIcons name="clear" size={20} color="#666" />
+              <MaterialIcons name="clear" size={20} color="#999" />
             </TouchableOpacity>
           )}
         </View>
-      </View>
 
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#ee4d2d" />
+        <View style={styles.listWrapper}>
+          <FlatList
+            data={filteredFoods}
+            renderItem={renderFoodItem}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContainer}
+            ListEmptyComponent={() => (
+              <View style={styles.emptyContainer}>
+                <MaterialIcons name="restaurant" size={64} color="#ccc" />
+                <Text style={styles.emptyText}>
+                  {searchQuery.length > 0
+                    ? 'Không tìm thấy món ăn nào'
+                    : 'Chưa có món ăn nào'}
+                </Text>
+              </View>
+            )}
+          />
         </View>
-      ) : (
-        <FlatList
-          data={filteredFoods}
-          renderItem={renderFoodItem}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContainer}
-          ListEmptyComponent={() => (
-            <View style={styles.emptyContainer}>
-              <MaterialIcons name="restaurant" size={64} color="#ccc" />
-              <Text style={styles.emptyText}>
-                {searchQuery.length > 0 
-                  ? 'Không tìm thấy món ăn nào'
-                  : 'Chưa có món ăn nào'}
-              </Text>
-            </View>
-          )}
-        />
-      )}
+      </RestaurantScreenWrapper>
 
       <FoodFormModal
         visible={modalVisible}
@@ -766,70 +756,43 @@ const ManageFoodsScreen = () => {
         editingFood={editingFood}
         categories={categories}
       />
-    </SafeAreaView>
+    </>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  loadingContainer: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
-  },
-  header: {
-    backgroundColor: '#fff',
-    paddingTop: 16,
-    paddingBottom: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  headerIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#FFF3F0',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    backgroundColor: '#fff',
   },
-  headerTextContainer: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#1A1A1A',
-    marginBottom: 2,
-  },
-  headerSubtitle: {
-    fontSize: 13,
-    color: '#666',
-  },
-  addButton: {
+  headerIconButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#ee4d2d',
+    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  searchCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 44,
+    flex: 1,
   },
   searchIcon: {
     marginRight: 8,
@@ -838,6 +801,13 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     color: '#333',
+  },
+  listWrapper: {
+    flex: 1,
+  },
+  listContainer: {
+    paddingVertical: 12,
+    paddingHorizontal: 2,
   },
   clearButton: {
     padding: 4,

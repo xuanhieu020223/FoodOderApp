@@ -21,6 +21,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { db, auth } from '../../config/Firebase';
 import * as Location from 'expo-location';
 import { UserStackParamList } from '../../navigation/UserNavigator';
+import CustomerScreenWrapper from '../../components/CustomerScreenWrapper';
+import FloatingChatButton from '../../components/FloatingChatButton';
 
 type NavigationProp = NativeStackNavigationProp<UserStackParamList>;
 type CheckoutRouteProp = RouteProp<UserStackParamList, 'Checkout'>;
@@ -500,10 +502,13 @@ const CheckoutScreen = () => {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#ee4d2d" />
-        <Text style={styles.loadingText}>Đang tải thông tin...</Text>
-      </View>
+      <CustomerScreenWrapper gradientHeight={300}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#ee4d2d" />
+          <Text style={styles.loadingText}>Đang tải thông tin...</Text>
+        </View>
+        <FloatingChatButton />
+      </CustomerScreenWrapper>
     );
   }
 
@@ -518,8 +523,10 @@ const CheckoutScreen = () => {
   const availableVouchers = vouchers.filter(voucher => isVoucherEligible(voucher, subtotal));
 
   return (
-    <View style={styles.container}>
-      <ScrollView style={styles.scrollView}>
+    <CustomerScreenWrapper gradientHeight={320}>
+      <>
+      <View style={styles.container}>
+        <ScrollView style={styles.scrollView}>
         {/* Delivery Address Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -722,88 +729,79 @@ const CheckoutScreen = () => {
             onChangeText={(value) => handleInputChange('note', value)}
           />
         </View>
-      </ScrollView>
+        </ScrollView>
 
-      {/* Bottom Sheet */}
-      <View style={styles.bottomSheet}>
-        <View style={styles.priceDetails}>
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Tổng giá trị đơn hàng</Text>
-            <Text style={styles.priceValue}>
-              {subtotal.toLocaleString('vi-VN', {
-                style: 'currency',
-                currency: 'VND'
-              })}
-            </Text>
-          </View>
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Phí giao hàng</Text>
-            <Text style={styles.priceValue}>
-              {DELIVERY_FEE.toLocaleString('vi-VN', {
-                style: 'currency',
-                currency: 'VND'
-              })}
-            </Text>
-          </View>
-          {voucherDiscountAmount > 0 && (
+        <View style={styles.bottomSheet}>
+          <View style={styles.priceDetails}>
             <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>
-                Voucher {selectedVoucher?.code ? `(${selectedVoucher.code})` : ''}
-              </Text>
-              <Text style={[styles.priceValue, styles.discountValue]}>
-                -{voucherDiscountAmount.toLocaleString('vi-VN', {
+              <Text style={styles.priceLabel}>Tổng giá trị đơn hàng</Text>
+              <Text style={styles.priceValue}>
+                {subtotal.toLocaleString('vi-VN', {
                   style: 'currency',
                   currency: 'VND'
                 })}
               </Text>
             </View>
-          )}
-          <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Tổng cộng</Text>
-            <Text style={styles.totalPrice}>
-              {totalWithVoucher.toLocaleString('vi-VN', {
-                style: 'currency',
-                currency: 'VND'
-              })}
-            </Text>
-          </View>
-        </View>
-
-        <TouchableOpacity
-          style={[
-            styles.placeOrderButton,
-            (!isFormValid() || submitting) && styles.placeOrderButtonDisabled
-          ]}
-          onPress={handlePlaceOrder}
-          disabled={!isFormValid() || submitting}
-        >
-          {submitting ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.placeOrderButtonText}>
-              {isFormValid() ? 
-                `Đặt đơn • ${totalWithVoucher.toLocaleString('vi-VN', {
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>Phí giao hàng</Text>
+              <Text style={styles.priceValue}>
+                {DELIVERY_FEE.toLocaleString('vi-VN', {
                   style: 'currency',
                   currency: 'VND'
-                })}` : 
-                'Vui lòng điền đầy đủ thông tin'
-              }
-            </Text>
-          )}
-        </TouchableOpacity>
-
-        {/* Debug information in development */}
-        {/* {__DEV__ && (
-          <View style={styles.debugInfo}>
-            <Text>Form valid: {isFormValid() ? 'Yes' : 'No'}</Text>
-            <Text>Name: {orderDetails.fullName ? 'Filled' : 'Empty'}</Text>
-            <Text>Phone: {orderDetails.phone ? 'Filled' : 'Empty'}</Text>
-            <Text>Address: {orderDetails.address ? 'Filled' : 'Empty'}</Text>
-            <Text>Items count: {cartItems.length}</Text>
+                })}
+              </Text>
+            </View>
+            {voucherDiscountAmount > 0 && (
+              <View style={styles.priceRow}>
+                <Text style={styles.priceLabel}>
+                  Voucher {selectedVoucher?.code ? `(${selectedVoucher.code})` : ''}
+                </Text>
+                <Text style={[styles.priceValue, styles.discountValue]}>
+                  -{voucherDiscountAmount.toLocaleString('vi-VN', {
+                    style: 'currency',
+                    currency: 'VND'
+                  })}
+                </Text>
+              </View>
+            )}
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>Tổng cộng</Text>
+              <Text style={styles.totalPrice}>
+                {totalWithVoucher.toLocaleString('vi-VN', {
+                  style: 'currency',
+                  currency: 'VND'
+                })}
+              </Text>
+            </View>
           </View>
-        )} */}
+
+          <TouchableOpacity
+            style={[
+              styles.placeOrderButton,
+              (!isFormValid() || submitting) && styles.placeOrderButtonDisabled
+            ]}
+            onPress={handlePlaceOrder}
+            disabled={!isFormValid() || submitting}
+          >
+            {submitting ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.placeOrderButtonText}>
+                {isFormValid() ? 
+                  `Đặt đơn • ${totalWithVoucher.toLocaleString('vi-VN', {
+                    style: 'currency',
+                    currency: 'VND'
+                  })}` : 
+                  'Vui lòng điền đầy đủ thông tin'
+                }
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
+      <FloatingChatButton />
+      </>
+    </CustomerScreenWrapper>
   );
 };
 
@@ -902,6 +900,64 @@ const styles = StyleSheet.create({
     color: '#ee4d2d',
     fontWeight: '500',
   },
+  voucherButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: '#fff9f6',
+    borderWidth: 1,
+    borderColor: '#ffe0d4',
+    marginTop: 4,
+  },
+  voucherButtonDisabled: {
+    backgroundColor: '#f7f7f7',
+    borderColor: '#e5e5e5',
+  },
+  voucherButtonTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+  },
+  voucherButtonSubtitle: {
+    fontSize: 13,
+    color: '#666',
+    marginTop: 4,
+  },
+  selectedVoucherCard: {
+    marginTop: 12,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#f8c8b0',
+    backgroundColor: '#fff',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  selectedVoucherInfo: {
+    flex: 1,
+  },
+  selectedVoucherCode: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#ee4d2d',
+    marginBottom: 4,
+  },
+  selectedVoucherDesc: {
+    fontSize: 13,
+    color: '#555',
+    marginBottom: 4,
+  },
+  selectedVoucherMeta: {
+    fontSize: 12,
+    color: '#999',
+  },
+  removeVoucherText: {
+    color: '#ee4d2d',
+    fontWeight: '600',
+  },
   paymentOption: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -974,6 +1030,10 @@ const styles = StyleSheet.create({
   priceValue: {
     fontSize: 14,
     color: '#333',
+  },
+  discountValue: {
+    color: '#2f9c68',
+    fontWeight: '600',
   },
   totalRow: {
     flexDirection: 'row',

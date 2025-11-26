@@ -9,65 +9,137 @@ import {
   Image,
   Dimensions,
   ActivityIndicator,
-  SafeAreaView,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
-import type { StackNavigationProp } from '@react-navigation/stack';
-import type { AdminStackParamList } from '../../navigation/AdminNavigator';
+import type { CompositeNavigationProp } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { AdminStackParamList, RestaurantTabParamList } from '../../navigation/AdminNavigator';
 import { auth, db } from '../../config/Firebase';
 import { doc, getDoc } from 'firebase/firestore';
+import ChangePasswordModal from '../../components/ChangePasswordModal';
+import RestaurantScreenWrapper from '../../components/RestaurantScreenWrapper';
 
-type AdminNavigationProp = StackNavigationProp<AdminStackParamList>;
-
-interface StatCardProps {
-  title: string;
-  value: string;
-  icon: keyof typeof MaterialIcons.glyphMap;
-  color: string;
-}
-
-const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color }) => (
-  <View style={[styles.statCard, { borderLeftColor: color }]}>
-    <MaterialIcons name={icon} size={24} color={color} />
-    <Text style={styles.statValue}>{value}</Text>
-    <Text style={styles.statTitle}>{title}</Text>
-  </View>
-);
+type AdminNavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<RestaurantTabParamList>,
+  NativeStackNavigationProp<AdminStackParamList>
+>;
 
 interface MenuItemProps {
   title: string;
   icon: keyof typeof MaterialIcons.glyphMap;
-  screen: keyof AdminStackParamList;
   description: string;
   color: string;
+  onPress: () => void;
 }
 
-const MenuItem: React.FC<MenuItemProps> = ({ title, icon, screen, description, color }) => {
-  const navigation = useNavigation<AdminNavigationProp>();
-
-  return (
-    <TouchableOpacity
-      style={styles.menuItem}
-      onPress={() => navigation.navigate(screen)}
-    >
-      <View style={[styles.menuIconContainer, { backgroundColor: color }]}>
-        <MaterialIcons name={icon} size={28} color="#fff" />
-      </View>
-      <View style={styles.menuContent}>
-        <Text style={styles.menuTitle}>{title}</Text>
-        <Text style={styles.menuDescription}>{description}</Text>
-      </View>
-      <MaterialIcons name="chevron-right" size={24} color="#999" />
-    </TouchableOpacity>
-  );
-};
+const MenuItem: React.FC<MenuItemProps> = ({ title, icon, description, color, onPress }) => (
+  <TouchableOpacity style={styles.menuItem} onPress={onPress}>
+    <View style={[styles.menuIconContainer, { backgroundColor: color }]}>
+      <MaterialIcons name={icon} size={28} color="#fff" />
+    </View>
+    <View style={styles.menuContent}>
+      <Text style={styles.menuTitle}>{title}</Text>
+      <Text style={styles.menuDescription}>{description}</Text>
+    </View>
+    <MaterialIcons name="chevron-right" size={24} color="#999" />
+  </TouchableOpacity>
+);
 
 const AdminDashboardScreen = () => {
   const navigation = useNavigation<AdminNavigationProp>();
   const [restaurantInfo, setRestaurantInfo] = useState<{ name: string; image?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<string>('restaurant');
+  const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
+
+  const statCards = [
+    {
+      title: 'Đơn hàng mới',
+      value: '25',
+      icon: 'receipt-long' as const,
+      color: '#FFE8D9',
+      iconColor: '#F97316',
+    },
+    {
+      title: 'Doanh thu hôm nay',
+      value: '12.5M',
+      icon: 'attach-money' as const,
+      color: '#DCFCE7',
+      iconColor: '#22C55E',
+    },
+    {
+      title: 'Khách hàng mới',
+      value: '08',
+      icon: 'groups' as const,
+      color: '#E0F2FE',
+      iconColor: '#0EA5E9',
+    },
+    {
+      title: 'Sản phẩm hết hàng',
+      value: '03',
+      icon: 'error-outline' as const,
+      color: '#FEE2E2',
+      iconColor: '#EF4444',
+    },
+  ];
+
+  const managementMenu: MenuItemProps[] = [
+    {
+      title: 'Quản lý đơn hàng',
+      icon: 'receipt-long',
+      description: 'Theo dõi trạng thái đơn và cập nhật nhanh',
+      color: '#F97316',
+      onPress: () => navigation.navigate('Orders'),
+    },
+    {
+      title: 'Quản lý món ăn',
+      icon: 'restaurant-menu',
+      description: 'Thêm mới và chỉnh sửa thực đơn',
+      color: '#22C55E',
+      onPress: () => navigation.navigate('Menu'),
+    },
+    {
+      title: 'Danh mục món',
+      icon: 'category',
+      description: 'Sắp xếp và quản lý nhóm món',
+      color: '#EC4899',
+      onPress: () => navigation.navigate('ManageCategories'),
+    },
+    {
+      title: 'Khuyến mãi',
+      icon: 'campaign',
+      description: 'Tạo chiến dịch ưu đãi nhanh',
+      color: '#8B5CF6',
+      onPress: () => navigation.navigate('Promotions'),
+    },
+    ...(userRole === 'admin'
+      ? [
+          {
+            title: 'Người dùng',
+            icon: 'people',
+            description: 'Khách hàng • nhà hàng • shipper',
+            color: '#0EA5E9',
+            onPress: () => navigation.navigate('ManageUsers'),
+          } as MenuItemProps,
+        ]
+      : []),
+    {
+      title: 'Báo cáo & phân tích',
+      icon: 'bar-chart',
+      description: 'Hiệu suất bán hàng & giao hàng',
+      color: '#14B8A6',
+      onPress: () => navigation.navigate('Statistics'),
+    },
+    {
+      title: 'Hỗ trợ & khiếu nại',
+      icon: 'support-agent',
+      description: 'Xử lý ticket & phản hồi KH',
+      color: '#FBBF24',
+      onPress: () => navigation.navigate('Support'),
+    },
+  ];
 
   useEffect(() => {
     loadRestaurantInfo();
@@ -119,6 +191,32 @@ const AdminDashboardScreen = () => {
     }
   };
 
+  const headerRight = (
+    <TouchableOpacity style={styles.headerIconButton} onPress={() => navigation.navigate('Statistics')}>
+      <MaterialIcons name="insights" size={22} color="#fff" />
+    </TouchableOpacity>
+  );
+
+  const headerExtras = (
+    <View style={styles.profileCard}>
+      <View style={styles.profileAvatar}>
+        {restaurantInfo?.image ? (
+          <Image source={{ uri: restaurantInfo.image }} style={styles.profileImage} />
+        ) : (
+          <MaterialIcons name="restaurant" size={28} color="#ee4d2d" />
+        )}
+      </View>
+      <View style={styles.profileInfo}>
+        <Text style={styles.profileLabel}>Xin chào</Text>
+        <Text style={styles.profileName}>{restaurantInfo?.name || 'Nhà hàng FoodOrder'}</Text>
+      </View>
+      <TouchableOpacity onPress={handleLogout} style={styles.logoutPill}>
+        <MaterialIcons name="logout" size={18} color="#ee4d2d" />
+        <Text style={styles.logoutPillText}>Đăng xuất</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -128,229 +226,186 @@ const AdminDashboardScreen = () => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <View style={styles.headerIconContainer}>
-            <MaterialIcons name="restaurant-menu" size={28} color="#ee4d2d" />
-          </View>
-          <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>
-              {restaurantInfo?.name || 'Nhà hàng'}
-            </Text>
-            <Text style={styles.headerSubtitle}>
-              {userRole === 'admin' ? 'Quản trị hệ thống' : 'Quản lý nhà hàng'}
-            </Text>
-          </View>
-          <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-            <MaterialIcons name="logout" size={24} color="#ee4d2d" />
+    <>
+      <RestaurantScreenWrapper
+        title={restaurantInfo?.name || 'Nhà hàng'}
+        subtitle={userRole === 'admin' ? 'Quản trị hệ thống' : 'Quản lý nhà hàng'}
+        rightContent={headerRight}
+        headerExtras={headerExtras}
+      >
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Tổng quan hôm nay</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Statistics')}>
+            <Text style={styles.linkText}>Xem chi tiết</Text>
           </TouchableOpacity>
         </View>
-      </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.statsContainer}>
-          <StatCard
-            title="Đơn hàng mới"
-            value="25"
-            icon="receipt"
-            color="#2196F3"
-          />
-          <StatCard
-            title="Doanh thu hôm nay"
-            value="12.5M"
-            icon="attach-money"
-            color="#4CAF50"
-          />
-          <StatCard
-            title="Khách hàng mới"
-            value="08"
-            icon="person-add"
-            color="#FF9800"
-          />
-          <StatCard
-            title="Sản phẩm hết hàng"
-            value="03"
-            icon="error"
-            color="#f44336"
-          />
-        </View>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.statsScroll}
+        >
+          {statCards.map((card) => (
+            <View key={card.title} style={[styles.statCard, { backgroundColor: card.color }]}>
+              <View style={[styles.statIconContainer, { backgroundColor: card.iconColor }]}>
+                <MaterialIcons name={card.icon} size={20} color="#fff" />
+              </View>
+              <Text style={styles.statValue}>{card.value}</Text>
+              <Text style={styles.statLabel}>{card.title}</Text>
+            </View>
+          ))}
+        </ScrollView>
 
-        <Text style={styles.sectionTitle}>Quản lý nhà hàng</Text>
-        
-        <MenuItem
-          title="Quản lý đơn hàng"
-          icon="receipt"
-          screen="ManageOrders"
-          description="Xem và xử lý đơn hàng mới"
-          color="#2196F3"
-        />
-        
-        <MenuItem
-          title="Quản lý món ăn"
-          icon="restaurant"
-          screen="ManageProducts"
-          description="Thêm, sửa, xóa món ăn"
-          color="#4CAF50"
-        />
-        
-        <MenuItem
-          title="Quản lý danh mục"
-          icon="category"
-          screen="ManageCategories"
-          description="Sắp xếp và phân loại món ăn"
-          color="#FF9800"
-        />
-        
-        <MenuItem
-          title="Quản lý khuyến mãi"
-          icon="campaign"
-          screen="ManagePromotions"
-          description="Tạo & điều phối voucher toàn hệ thống"
-          color="#AB47BC"
-        />
-        
-        {userRole === 'admin' && (
-          <MenuItem
-            title="Quản lý người dùng"
-            icon="people"
-            screen="ManageUsers"
-            description="Khách hàng • nhà hàng • tài xế"
-            color="#9C27B0"
-          />
-        )}
-        
-        <MenuItem
-          title="Báo cáo & phân tích"
-          icon="bar-chart"
-          screen="Statistics"
-          description="Doanh thu • hiệu suất giao hàng"
-          color="#607D8B"
-        />
+        <Text style={[styles.sectionTitle, { marginTop: 12 }]}>Quản lý nhà hàng</Text>
+        {managementMenu.map((item) => (
+          <MenuItem key={item.title} {...item} />
+        ))}
 
-        <MenuItem
-          title="Hỗ trợ & khiếu nại"
-          icon="support-agent"
-          screen="SupportCenter"
-          description="Theo dõi ticket và phản hồi nhanh"
-          color="#00ACC1"
-        />
-      </ScrollView>
-    </SafeAreaView>
+        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Cài đặt</Text>
+        <TouchableOpacity
+          style={styles.menuItem}
+          onPress={() => setChangePasswordModalVisible(true)}
+        >
+          <View style={[styles.menuIconContainer, { backgroundColor: '#E91E63' }]}>
+            <MaterialIcons name="lock" size={28} color="#fff" />
+          </View>
+          <View style={styles.menuContent}>
+            <Text style={styles.menuTitle}>Đổi mật khẩu</Text>
+            <Text style={styles.menuDescription}>Thay đổi mật khẩu đăng nhập</Text>
+          </View>
+          <MaterialIcons name="chevron-right" size={24} color="#999" />
+        </TouchableOpacity>
+      </RestaurantScreenWrapper>
+
+      <ChangePasswordModal
+        visible={changePasswordModalVisible}
+        onClose={() => setChangePasswordModalVisible(false)}
+      />
+    </>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F7FA',
-  },
-  header: {
-    backgroundColor: '#fff',
-    paddingTop: 16,
-    paddingBottom: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#FFF3F0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  headerTextContainer: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#1A1A1A',
-    marginBottom: 2,
-  },
-  headerSubtitle: {
-    fontSize: 13,
-    color: '#666',
-  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#fff',
   },
-  logoutButton: {
+  headerIconButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  content: {
-    flex: 1,
-    padding: 15,
-  },
-  statsContainer: {
+  profileCard: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 20,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    marginTop: 16,
   },
-  statCard: {
-    width: '48%',
+  profileAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: '#fff',
-    padding: 15,
-    borderRadius: 12,
-    marginBottom: 15,
-    borderLeftWidth: 4,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
   },
-  statValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginVertical: 8,
+  profileImage: {
+    width: '100%',
+    height: '100%',
   },
-  statTitle: {
-    fontSize: 14,
-    color: '#666',
+  profileInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  profileLabel: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  profileName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    marginTop: 2,
+  },
+  logoutPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  logoutPillText: {
+    marginLeft: 6,
+    color: '#ee4d2d',
+    fontWeight: '600',
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 15,
-    marginTop: 10,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  linkText: {
+    color: '#ee4d2d',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  statsScroll: {
+    paddingVertical: 6,
+  },
+  statCard: {
+    width: Dimensions.get('window').width * 0.6,
+    borderRadius: 20,
+    padding: 18,
+    marginRight: 14,
+  },
+  statIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  statValue: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  statLabel: {
+    fontSize: 14,
+    color: '#475467',
+    marginTop: 4,
   },
   menuItem: {
     backgroundColor: '#fff',
-    borderRadius: 12,
-    marginBottom: 12,
-    padding: 15,
+    borderRadius: 20,
+    marginBottom: 14,
+    padding: 18,
     flexDirection: 'row',
     alignItems: 'center',
-    elevation: 2,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
   menuIconContainer: {
     width: 50,

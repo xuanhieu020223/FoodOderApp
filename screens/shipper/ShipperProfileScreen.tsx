@@ -7,6 +7,7 @@ import { signOut, updateProfile } from 'firebase/auth';
 import { auth, db } from '../../config/Firebase';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import ChangePasswordModal from '../../components/ChangePasswordModal';
 
 const ShipperProfileScreen = ({ navigation }: any) => {
   const [userData, setUserData] = useState<any>(null);
@@ -17,6 +18,7 @@ const ShipperProfileScreen = ({ navigation }: any) => {
   const [editPhone, setEditPhone] = useState('');
   const [editAddress, setEditAddress] = useState('');
   const [saving, setSaving] = useState(false);
+  const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
   const user = auth.currentUser;
 
   useEffect(() => {
@@ -338,6 +340,19 @@ const ShipperProfileScreen = ({ navigation }: any) => {
               <MaterialIcons name="chevron-right" size={24} color="#999" />
             </View>
           </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.settingsCard}
+            onPress={() => setChangePasswordModalVisible(true)}
+          >
+            <View style={styles.settingsRow}>
+              <View style={styles.settingsIconContainer}>
+                <MaterialIcons name="lock" size={22} color="#E91E63" />
+              </View>
+              <Text style={styles.settingsText}>Đổi mật khẩu</Text>
+              <MaterialIcons name="chevron-right" size={24} color="#999" />
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* Logout Button */}
@@ -425,6 +440,11 @@ const ShipperProfileScreen = ({ navigation }: any) => {
           </View>
         </View>
       </Modal>
+
+      <ChangePasswordModal
+        visible={changePasswordModalVisible}
+        onClose={() => setChangePasswordModalVisible(false)}
+      />
     </View>
   );
 };

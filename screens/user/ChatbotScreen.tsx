@@ -2,11 +2,10 @@ import React, { useState } from 'react';
 import {
   View,
   StyleSheet,
-  SafeAreaView,
-  StatusBar,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import AIChatbox from '../../components/AIChatbox';
+import CustomerScreenWrapper from '../../components/CustomerScreenWrapper';
 
 const ChatbotScreen = () => {
   const [showChatbox, setShowChatbox] = useState(true);
@@ -21,20 +20,15 @@ const ChatbotScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#ee4d2d" />
+    <CustomerScreenWrapper gradientHeight={200} barStyle="light-content">
       <View style={styles.content}>
         <AIChatbox visible={showChatbox} onClose={handleClose} />
       </View>
-    </SafeAreaView>
+    </CustomerScreenWrapper>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
   content: {
     flex: 1,
   },

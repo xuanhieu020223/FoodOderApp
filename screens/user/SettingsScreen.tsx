@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import ChangePasswordModal from '../../components/ChangePasswordModal';
 
 const SettingsScreen = () => {
   const [settings, setSettings] = useState({
@@ -20,6 +21,7 @@ const SettingsScreen = () => {
     autoSave: true,
     biometricLogin: false,
   });
+  const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
 
   const handleToggle = async (key: keyof typeof settings) => {
     try {
@@ -154,6 +156,25 @@ const SettingsScreen = () => {
       </View>
 
       <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Bảo mật</Text>
+        <TouchableOpacity
+          style={styles.settingItem}
+          onPress={() => setChangePasswordModalVisible(true)}
+        >
+          <View style={styles.settingLeft}>
+            <View style={[styles.iconContainer, { backgroundColor: '#E91E63' }]}>
+              <Ionicons name="lock-closed-outline" size={20} color="#fff" />
+            </View>
+            <View>
+              <Text style={styles.settingTitle}>Đổi mật khẩu</Text>
+              <Text style={styles.settingDescription}>Thay đổi mật khẩu đăng nhập</Text>
+            </View>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color="#999" />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.section}>
         <Text style={styles.sectionTitle}>Dữ liệu</Text>
         <TouchableOpacity
           style={styles.clearCacheButton}
@@ -174,6 +195,11 @@ const SettingsScreen = () => {
           <Text style={styles.infoValue}>1.0.0</Text>
         </View>
       </View>
+
+      <ChangePasswordModal
+        visible={changePasswordModalVisible}
+        onClose={() => setChangePasswordModalVisible(false)}
+      />
     </ScrollView>
   );
 };

@@ -1,7 +1,8 @@
 import React from 'react';
 import { createStackNavigator, StackHeaderLeftProps } from '@react-navigation/stack';
-import { MaterialIcons } from '@expo/vector-icons';
-import { TouchableOpacity, StyleSheet, View, Text } from 'react-native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { MaterialIcons, Ionicons } from '@expo/vector-icons';
+import { TouchableOpacity, StyleSheet } from 'react-native';
 import type { StackNavigationOptions } from '@react-navigation/stack';
 import { useNavigation } from '@react-navigation/native';
 import ManageUsersScreen from '../screens/customer/ManageUsersScreen';
@@ -9,24 +10,28 @@ import ManageFoodsScreen from '../screens/customer/ManageFoodsScreen';
 import ManageCategoriesScreen from '../screens/customer/ManageCategoriesScreen';
 import ManageOrdersScreen from '../screens/customer/ManageOrdersScreen';
 import StatisticsScreen from '../screens/customer/StatisticsScreen';
-import AdminDashboardScreen from '../screens/customer/AdminDashboardScreen';
 import PromotionManagementScreen from '../screens/customer/PromotionManagementScreen';
 import SupportCenterScreen from '../screens/customer/SupportCenterScreen';
 import OrderTrackingScreen from '../screens/OrderTrackingScreen';
+import RestaurantAccountScreen from '../screens/customer/RestaurantAccountScreen';
+
+export type RestaurantTabParamList = {
+  Orders: undefined;
+  Menu: undefined;
+  Revenue: undefined;
+  Promotions: undefined;
+  Account: undefined;
+};
 
 type AdminStackParamList = {
-  AdminDashboard: undefined;
-  ManageOrders: undefined;
-  ManageProducts: undefined;
+  AdminTabs: undefined;
   ManageCategories: undefined;
   ManageUsers: undefined;
-  Statistics: undefined;
-  ManagePromotions: undefined;
-  SupportCenter: undefined;
   OrderTracking: { orderId: string; userRole?: 'customer' | 'shipper' | 'restaurant' };
 };
 
 const Stack = createStackNavigator<AdminStackParamList>();
+const Tab = createBottomTabNavigator<RestaurantTabParamList>();
 
 const HeaderLeft = ({ canGoBack }: StackHeaderLeftProps) => {
   const navigation = useNavigation();
@@ -45,8 +50,8 @@ const HeaderLeft = ({ canGoBack }: StackHeaderLeftProps) => {
 const screenOptions: StackNavigationOptions = {
   headerStyle: {
     backgroundColor: '#ee4d2d',
-    elevation: 0, // Android
-    shadowOpacity: 0, // iOS
+    elevation: 0,
+    shadowOpacity: 0,
   },
   headerTintColor: '#fff',
   headerTitleStyle: {
@@ -57,28 +62,59 @@ const screenOptions: StackNavigationOptions = {
   headerTitleAlign: 'center',
 };
 
+const AdminTabNavigator = () => (
+  <Tab.Navigator
+    screenOptions={({ route }) => ({
+      headerShown: false,
+      tabBarActiveTintColor: '#ee4d2d',
+      tabBarInactiveTintColor: '#94a3b8',
+      tabBarStyle: {
+        height: 70,
+        paddingBottom: 10,
+        paddingTop: 10,
+        backgroundColor: '#fff',
+      },
+      tabBarIcon: ({ focused, color, size }) => {
+        let iconName: keyof typeof Ionicons.glyphMap = 'home';
+        switch (route.name) {
+          case 'Orders':
+            iconName = focused ? 'reader' : 'reader-outline';
+            break;
+          case 'Menu':
+            iconName = focused ? 'restaurant' : 'restaurant-outline';
+            break;
+          case 'Revenue':
+            iconName = focused ? 'bar-chart' : 'bar-chart-outline';
+            break;
+          case 'Promotions':
+            iconName = focused ? 'gift' : 'gift-outline';
+            break;
+          case 'Account':
+            iconName = focused ? 'person' : 'person-outline';
+            break;
+          default:
+            break;
+        }
+        return <Ionicons name={iconName} size={size} color={color} />;
+      },
+    })}
+  >
+    <Tab.Screen name="Orders" component={ManageOrdersScreen} options={{ tabBarLabel: 'Đơn hàng' }} />
+    <Tab.Screen name="Menu" component={ManageFoodsScreen} options={{ tabBarLabel: 'Thực đơn' }} />
+    <Tab.Screen name="Revenue" component={StatisticsScreen} options={{ tabBarLabel: 'Doanh thu' }} />
+    <Tab.Screen name="Promotions" component={PromotionManagementScreen} options={{ tabBarLabel: 'Khuyến mãi' }} />
+    <Tab.Screen name="Account" component={RestaurantAccountScreen} options={{ tabBarLabel: 'Tài khoản' }} />
+  </Tab.Navigator>
+);
+
 const AdminNavigator = () => {
   return (
     <Stack.Navigator screenOptions={screenOptions}>
       <Stack.Screen
-        name="AdminDashboard"
-        component={AdminDashboardScreen}
+        name="AdminTabs"
+        component={AdminTabNavigator}
         options={{
           headerShown: false,
-        }}
-      />
-      <Stack.Screen
-        name="ManageOrders"
-        component={ManageOrdersScreen}
-        options={{
-          title: 'Quản lý đơn hàng',
-        }}
-      />
-      <Stack.Screen
-        name="ManageProducts"
-        component={ManageFoodsScreen}
-        options={{
-          title: 'Quản lý món ăn',
         }}
       />
       <Stack.Screen
@@ -93,27 +129,6 @@ const AdminNavigator = () => {
         component={ManageUsersScreen}
         options={{
           title: 'Quản lý người dùng',
-        }}
-      />
-      <Stack.Screen
-        name="Statistics"
-        component={StatisticsScreen}
-        options={{
-          title: 'Thống kê doanh thu',
-        }}
-      />
-      <Stack.Screen
-        name="ManagePromotions"
-        component={PromotionManagementScreen}
-        options={{
-          title: 'Quản lý khuyến mãi',
-        }}
-      />
-      <Stack.Screen
-        name="SupportCenter"
-        component={SupportCenterScreen}
-        options={{
-          title: 'Hỗ trợ & khiếu nại',
         }}
       />
       <Stack.Screen
@@ -140,5 +155,5 @@ const styles = StyleSheet.create({
   },
 });
 
-export type { AdminStackParamList };
+export type { AdminStackParamList, RestaurantTabParamList };
 export default AdminNavigator; 

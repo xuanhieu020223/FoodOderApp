@@ -8,7 +8,6 @@ import {
   Image,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
   Dimensions,
   RefreshControl,
   Alert,
@@ -16,14 +15,15 @@ import {
 } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import LoadingSpinner from '../../components/LoadingSpinner';
-import AIChatbox from '../../components/AIChatbox';
+import FloatingChatButton from '../../components/FloatingChatButton';
+import CustomerScreenWrapper from '../../components/CustomerScreenWrapper';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { collection, query, getDocs, orderBy, where, limit, deleteDoc, doc, addDoc } from 'firebase/firestore';
 import { db, auth } from '../../config/Firebase';
 import { UserStackParamList } from '../../navigation/UserNavigator';
+import { getRecommendationsForUser, RecommendedFood } from '../../services/recommendationService';
 
 type NavigationProp = NativeStackNavigationProp<UserStackParamList>;
 
@@ -134,7 +134,8 @@ const HomeScreen = () => {
   const [showSortModal, setShowSortModal] = useState(false);
   const [selectedSort, setSelectedSort] = useState<string>('default');
   const [priceFilter, setPriceFilter] = useState<'all' | 'low' | 'medium' | 'high'>('all');
-  const [showChatbox, setShowChatbox] = useState(false);
+  const [frequentlyBought, setFrequentlyBought] = useState<RecommendedFood[]>([]);
+  const [personalizedRecommendations, setPersonalizedRecommendations] = useState<RecommendedFood[]>([]);
 
   useEffect(() => {
     const map: Record<string, Restaurant> = {};
@@ -180,12 +181,27 @@ const HomeScreen = () => {
   useEffect(() => {
     loadCartItemCount();
     loadFavorites();
+    loadRecommendations();
     const unsubscribe = navigation.addListener('focus', () => {
       loadCartItemCount();
       loadFavorites();
+      loadRecommendations();
     });
     return unsubscribe;
   }, [navigation]);
+
+  const loadRecommendations = async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+      
+      const recommendations = await getRecommendationsForUser(user.uid);
+      setFrequentlyBought(recommendations.frequentlyBought);
+      setPersonalizedRecommendations(recommendations.personalized);
+    } catch (error) {
+      console.error('Error loading recommendations:', error);
+    }
+  };
 
   useEffect(() => {
     navigation.setOptions({
@@ -271,7 +287,17 @@ const HomeScreen = () => {
       const categoriesSnapshot = await getDocs(query(categoriesRef, orderBy('priority')));
       const categoriesData: Category[] = [];
       categoriesSnapshot.forEach((doc) => {
-        categoriesData.push({ id: doc.id, ...doc.data() } as Category);
+        const data = doc.data();
+        // Ensure icon is set, default to 'restaurant' if missing
+        categoriesData.push({ 
+          id: doc.id, 
+          name: data.name || '',
+          description: data.description || '',
+          priority: data.priority || 0,
+          icon: (data.icon && typeof data.icon === 'string') 
+            ? (data.icon as MaterialIconName)
+            : 'restaurant'
+        } as Category);
       });
       setCategories(categoriesData);
 
@@ -337,6 +363,7 @@ const HomeScreen = () => {
     await loadData();
     await loadCartItemCount();
     await loadFavorites();
+    await loadRecommendations();
     setRefreshing(false);
   };
 
@@ -383,30 +410,37 @@ const HomeScreen = () => {
     }
   };
 
-  const renderCategory = ({ item }: { item: Category }) => (
-    <TouchableOpacity 
-      style={[
-        styles.categoryItem,
-        selectedCategory === item.id && styles.categoryItemSelected
-      ]}
-      onPress={() => handleCategoryPress(item.id)}
-    >
-      <View style={[
-        styles.categoryIcon,
-        selectedCategory === item.id && styles.categoryIconSelected
-      ]}>
-        <MaterialIcons 
-          name={item.icon in MaterialIcons.glyphMap ? item.icon : 'restaurant'} 
-          size={24} 
-          color={selectedCategory === item.id ? "#fff" : "#ee4d2d"} 
-        />
-      </View>
-      <Text style={[
-        styles.categoryName,
-        selectedCategory === item.id && styles.categoryNameSelected
-      ]} numberOfLines={1}>{item.name}</Text>
-    </TouchableOpacity>
-  );
+  const renderCategory = ({ item }: { item: Category }) => {
+    // Ensure icon is valid, fallback to 'restaurant' if not
+    const iconName = (item.icon && typeof item.icon === 'string') 
+      ? (item.icon as keyof typeof MaterialIcons.glyphMap)
+      : 'restaurant';
+    
+    return (
+      <TouchableOpacity 
+        style={[
+          styles.categoryItem,
+          selectedCategory === item.id && styles.categoryItemSelected
+        ]}
+        onPress={() => handleCategoryPress(item.id)}
+      >
+        <View style={[
+          styles.categoryIcon,
+          selectedCategory === item.id && styles.categoryIconSelected
+        ]}>
+          <MaterialIcons 
+            name={iconName} 
+            size={24} 
+            color={selectedCategory === item.id ? "#fff" : "#ee4d2d"} 
+          />
+        </View>
+        <Text style={[
+          styles.categoryName,
+          selectedCategory === item.id && styles.categoryNameSelected
+        ]} numberOfLines={1}>{item.name}</Text>
+      </TouchableOpacity>
+    );
+  };
 
   const renderPromotion = ({ item }: { item: Promotion }) => (
     <TouchableOpacity 
@@ -658,9 +692,10 @@ const HomeScreen = () => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <CustomerScreenWrapper gradientHeight={280}>
       {renderSortModal()}
       <ScrollView
+        style={styles.container}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ee4d2d" />
@@ -749,13 +784,91 @@ const HomeScreen = () => {
               </View>
             )}
 
+            {/* Frequently Bought Items */}
+            {frequentlyBought.length > 0 && !selectedCategory && (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionTitleContainer}>
+                    <Ionicons name="repeat" size={20} color="#ee4d2d" />
+                    <Text style={styles.sectionTitle}>Món bạn hay mua</Text>
+                  </View>
+                </View>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.recommendationsContainer}
+                >
+                  {frequentlyBought.map((item) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={styles.recommendationCard}
+                      onPress={() => navigation.navigate('FoodDetail', { foodId: item.id })}
+                    >
+                      <Image source={{ uri: item.imageUrl }} style={styles.recommendationImage} resizeMode="cover" />
+                      <View style={styles.recommendationBadge}>
+                        <Ionicons name="repeat" size={12} color="#fff" />
+                        <Text style={styles.recommendationBadgeText}>{item.reason}</Text>
+                      </View>
+                      <View style={styles.recommendationContent}>
+                        <Text style={styles.recommendationName} numberOfLines={2}>
+                          {item.name}
+                        </Text>
+                        <Text style={styles.recommendationPrice}>
+                          {item.price.toLocaleString('vi-VN')} đ
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Personalized Recommendations */}
+            {personalizedRecommendations.length > 0 && !selectedCategory && (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionTitleContainer}>
+                    <Ionicons name="heart" size={20} color="#ee4d2d" />
+                    <Text style={styles.sectionTitle}>Gợi ý dựa trên sở thích</Text>
+                  </View>
+                </View>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.recommendationsContainer}
+                >
+                  {personalizedRecommendations.map((item) => (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={styles.recommendationCard}
+                      onPress={() => navigation.navigate('FoodDetail', { foodId: item.id })}
+                    >
+                      <Image source={{ uri: item.imageUrl }} style={styles.recommendationImage} resizeMode="cover" />
+                      <View style={styles.recommendationBadge}>
+                        <Ionicons name="sparkles" size={12} color="#fff" />
+                        <Text style={styles.recommendationBadgeText}>{item.reason}</Text>
+                      </View>
+                      <View style={styles.recommendationContent}>
+                        <Text style={styles.recommendationName} numberOfLines={2}>
+                          {item.name}
+                        </Text>
+                        <Text style={styles.recommendationPrice}>
+                          {item.price.toLocaleString('vi-VN')} đ
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
             {/* Foods Section */}
             <View style={styles.section}>
               <View style={styles.foodsHeader}>
                 <Text style={styles.sectionTitle}>
                   {selectedCategory 
                     ? categories.find(c => c.id === selectedCategory)?.name || 'Món ăn'
-                    : 'Gợi ý cho bạn'
+                    : 'Tất cả món ăn'
                   }
                 </Text>
                 <TouchableOpacity 
@@ -869,31 +982,8 @@ const HomeScreen = () => {
         
         <View style={{ height: 24 }} />
       </ScrollView>
-      
-      {/* AI Chatbox Floating Button */}
-      <Animated.View
-        entering={FadeInDown.duration(500).delay(300)}
-        style={styles.chatButtonContainer}
-      >
-        <TouchableOpacity
-          onPress={() => setShowChatbox(true)}
-          style={styles.chatButton}
-          activeOpacity={0.8}
-        >
-          <LinearGradient
-            colors={['#ee4d2d', '#ff6b4a']}
-            style={styles.chatButtonGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <MaterialIcons name="smart-toy" size={24} color="#fff" />
-          </LinearGradient>
-        </TouchableOpacity>
-      </Animated.View>
-
-      {/* AI Chatbox Modal */}
-      <AIChatbox visible={showChatbox} onClose={() => setShowChatbox(false)} />
-    </SafeAreaView>
+      <FloatingChatButton />
+    </CustomerScreenWrapper>
   );
 };
 
@@ -1486,28 +1576,63 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
-  chatButtonContainer: {
-    position: 'absolute',
-    bottom: 100,
-    right: 20,
-    zIndex: 1000,
-  },
-  chatButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    shadowColor: '#ee4d2d',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  chatButtonGradient: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
+  sectionTitleContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+  },
+  recommendationsContainer: {
+    paddingHorizontal: 16,
+  },
+  recommendationCard: {
+    width: 180,
+    marginRight: 12,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    position: 'relative',
+  },
+  recommendationImage: {
+    width: '100%',
+    height: 140,
+    backgroundColor: '#eee',
+  },
+  recommendationBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(238, 77, 45, 0.9)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  recommendationBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  recommendationContent: {
+    padding: 12,
+  },
+  recommendationName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1A1A1A',
+    marginBottom: 6,
+    minHeight: 36,
+  },
+  recommendationPrice: {
+    fontSize: 16,
+    color: '#ee4d2d',
+    fontWeight: 'bold',
   },
 });
 

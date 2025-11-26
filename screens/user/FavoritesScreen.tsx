@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  SafeAreaView,
   RefreshControl,
   Dimensions,
   ScrollView,
@@ -19,6 +18,8 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { collection, query, where, getDocs, deleteDoc, doc, getDoc } from 'firebase/firestore';
 import { db, auth } from '../../config/Firebase';
 import { UserStackParamList } from '../../navigation/UserNavigator';
+import CustomerScreenWrapper from '../../components/CustomerScreenWrapper';
+import FloatingChatButton from '../../components/FloatingChatButton';
 
 const { width } = Dimensions.get('window');
 
@@ -236,132 +237,138 @@ const FavoritesScreen = () => {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#ee4d2d" />
-      </View>
+      <CustomerScreenWrapper gradientHeight={260}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#ee4d2d" />
+        </View>
+        <FloatingChatButton />
+      </CustomerScreenWrapper>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Món ăn yêu thích</Text>
-        {favorites.length > 0 && (
-          <Text style={styles.headerSubtitle}>{favorites.length} món đã lưu</Text>
-        )}
-      </View>
-
-      {favorites.length > 0 && (
-        <View style={styles.filtersContainer}>
-          {/* Category Filter */}
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            style={styles.categoryScroll}
-            contentContainerStyle={styles.categoryContainer}
-          >
-            <TouchableOpacity
-              style={[
-                styles.categoryChip,
-                selectedCategory === null && styles.categoryChipActive
-              ]}
-              onPress={() => setSelectedCategory(null)}
-            >
-              <Text style={[
-                styles.categoryChipText,
-                selectedCategory === null && styles.categoryChipTextActive
-              ]}>
-                Tất cả
-              </Text>
-            </TouchableOpacity>
-            {categories.map((category) => (
-              <TouchableOpacity
-                key={category}
-                style={[
-                  styles.categoryChip,
-                  selectedCategory === category && styles.categoryChipActive
-                ]}
-                onPress={() => setSelectedCategory(category)}
-              >
-                <Text style={[
-                  styles.categoryChipText,
-                  selectedCategory === category && styles.categoryChipTextActive
-                ]}>
-                  {category}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-
-          {/* Sort Options */}
-          <View style={styles.sortContainer}>
-            <Text style={styles.sortLabel}>Sắp xếp:</Text>
-            <TouchableOpacity
-              style={[styles.sortButton, sortBy === 'recent' && styles.sortButtonActive]}
-              onPress={() => setSortBy('recent')}
-            >
-              <Text style={[styles.sortButtonText, sortBy === 'recent' && styles.sortButtonTextActive]}>
-                Mới nhất
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.sortButton, sortBy === 'priceAsc' && styles.sortButtonActive]}
-              onPress={() => setSortBy('priceAsc')}
-            >
-              <Text style={[styles.sortButtonText, sortBy === 'priceAsc' && styles.sortButtonTextActive]}>
-                Giá ↑
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.sortButton, sortBy === 'priceDesc' && styles.sortButtonActive]}
-              onPress={() => setSortBy('priceDesc')}
-            >
-              <Text style={[styles.sortButtonText, sortBy === 'priceDesc' && styles.sortButtonTextActive]}>
-                Giá ↓
-              </Text>
-            </TouchableOpacity>
+    <CustomerScreenWrapper gradientHeight={260}>
+      <>
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Món ăn yêu thích</Text>
+            {favorites.length > 0 && (
+              <Text style={styles.headerSubtitle}>{favorites.length} món đã lưu</Text>
+            )}
           </View>
-        </View>
-      )}
 
-      {favorites.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="heart-outline" size={80} color="#ddd" />
-          <Text style={styles.emptyText}>Chưa có món ăn yêu thích</Text>
-          <TouchableOpacity
-            style={styles.browseButton}
-            onPress={() => navigation.navigate('TabNavigator', { screen: 'Home' })}
-          >
-            <Text style={styles.browseButtonText}>Khám phá món ăn</Text>
-          </TouchableOpacity>
+          {favorites.length > 0 && (
+            <View style={styles.filtersContainer}>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                style={styles.categoryScroll}
+                contentContainerStyle={styles.categoryContainer}
+              >
+                <TouchableOpacity
+                  style={[
+                    styles.categoryChip,
+                    selectedCategory === null && styles.categoryChipActive
+                  ]}
+                  onPress={() => setSelectedCategory(null)}
+                >
+                  <Text style={[
+                    styles.categoryChipText,
+                    selectedCategory === null && styles.categoryChipTextActive
+                  ]}>
+                    Tất cả
+                  </Text>
+                </TouchableOpacity>
+                {categories.map((category) => (
+                  <TouchableOpacity
+                    key={category}
+                    style={[
+                      styles.categoryChip,
+                      selectedCategory === category && styles.categoryChipActive
+                    ]}
+                    onPress={() => setSelectedCategory(category)}
+                  >
+                    <Text style={[
+                      styles.categoryChipText,
+                      selectedCategory === category && styles.categoryChipTextActive
+                    ]}>
+                      {category}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              <View style={styles.sortContainer}>
+                <Text style={styles.sortLabel}>Sắp xếp:</Text>
+                <TouchableOpacity
+                  style={[styles.sortButton, sortBy === 'recent' && styles.sortButtonActive]}
+                  onPress={() => setSortBy('recent')}
+                >
+                  <Text style={[styles.sortButtonText, sortBy === 'recent' && styles.sortButtonTextActive]}>
+                    Mới nhất
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.sortButton, sortBy === 'priceAsc' && styles.sortButtonActive]}
+                  onPress={() => setSortBy('priceAsc')}
+                >
+                  <Text style={[styles.sortButtonText, sortBy === 'priceAsc' && styles.sortButtonTextActive]}>
+                    Giá ↑
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.sortButton, sortBy === 'priceDesc' && styles.sortButtonActive]}
+                  onPress={() => setSortBy('priceDesc')}
+                >
+                  <Text style={[styles.sortButtonText, sortBy === 'priceDesc' && styles.sortButtonTextActive]}>
+                    Giá ↓
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {favorites.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="heart-outline" size={80} color="#ddd" />
+              <Text style={styles.emptyText}>Chưa có món ăn yêu thích</Text>
+              <TouchableOpacity
+                style={styles.browseButton}
+                onPress={() => navigation.navigate('TabNavigator', { screen: 'Home' })}
+              >
+                <Text style={styles.browseButtonText}>Khám phá món ăn</Text>
+              </TouchableOpacity>
+            </View>
+          ) : filteredFavorites.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="search-outline" size={80} color="#ddd" />
+              <Text style={styles.emptyText}>Không tìm thấy món ăn nào</Text>
+              <TouchableOpacity
+                style={styles.browseButton}
+                onPress={() => {
+                  setSelectedCategory(null);
+                  setSortBy('recent');
+                }}
+              >
+                <Text style={styles.browseButtonText}>Xóa bộ lọc</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <FlatList
+              data={filteredFavorites}
+              renderItem={renderFavoriteItem}
+              keyExtractor={item => item.id}
+              contentContainerStyle={styles.listContainer}
+              showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+              }
+            />
+          )}
         </View>
-      ) : filteredFavorites.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="search-outline" size={80} color="#ddd" />
-          <Text style={styles.emptyText}>Không tìm thấy món ăn nào</Text>
-          <TouchableOpacity
-            style={styles.browseButton}
-            onPress={() => {
-              setSelectedCategory(null);
-              setSortBy('recent');
-            }}
-          >
-            <Text style={styles.browseButtonText}>Xóa bộ lọc</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <FlatList
-          data={filteredFavorites}
-          renderItem={renderFavoriteItem}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.listContainer}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-          }
-        />
-      )}
-    </SafeAreaView>
+        <FloatingChatButton />
+      </>
+    </CustomerScreenWrapper>
   );
 };
 

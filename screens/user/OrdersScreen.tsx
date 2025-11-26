@@ -43,6 +43,12 @@ interface Order {
   address: string;
   rating?: number;
   review?: string;
+  restaurantRating?: number;
+  restaurantReview?: string;
+  shipperId?: string;
+  shipperRating?: number;
+  shipperReview?: string;
+  itemRatings?: { [foodId: string]: { rating: number; review?: string } };
   deliveryFee?: number;
   voucherDiscount?: number;
   subtotal?: number;
@@ -60,7 +66,13 @@ const OrdersScreen = () => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [rating, setRating] = useState(5);
   const [review, setReview] = useState('');
+  const [restaurantRating, setRestaurantRating] = useState(5);
+  const [restaurantReview, setRestaurantReview] = useState('');
+  const [shipperRating, setShipperRating] = useState(5);
+  const [shipperReview, setShipperReview] = useState('');
+  const [itemRatings, setItemRatings] = useState<{ [foodId: string]: { rating: number; review?: string } }>({});
   const [submittingReview, setSubmittingReview] = useState(false);
+  const [ratingType, setRatingType] = useState<'overall' | 'restaurant' | 'shipper' | 'items'>('overall');
 
   const tabs = [
     { id: 'all', label: 'Tất cả', count: 0 },
@@ -128,25 +140,170 @@ const OrdersScreen = () => {
 
     try {
       setSubmittingReview(true);
-      await updateDoc(doc(db, 'orders', selectedOrder.id), {
-        rating,
-        review,
-      });
+      const updateData: any = {};
+      
+      if (ratingType === 'overall') {
+        updateData.rating = rating;
+        updateData.review = review;
+      } else if (ratingType === 'restaurant') {
+        updateData.restaurantRating = restaurantRating;
+        updateData.restaurantReview = restaurantReview;
+      } else if (ratingType === 'shipper') {
+        updateData.shipperRating = shipperRating;
+        updateData.shipperReview = shipperReview;
+      } else if (ratingType === 'items') {
+        updateData.itemRatings = itemRatings;
+      }
+
+      await updateDoc(doc(db, 'orders', selectedOrder.id), updateData);
+
+      // Update restaurant rating if restaurant rating was submitted
+      if (ratingType === 'restaurant' && selectedOrder.restaurantId) {
+        await updateRestaurantRating(selectedOrder.restaurantId, restaurantRating);
+      }
+
+      // Update shipper rating if shipper rating was submitted
+      if (ratingType === 'shipper' && selectedOrder.shipperId) {
+        await updateShipperRating(selectedOrder.shipperId, shipperRating);
+      }
+
+      // Update food item ratings if item ratings were submitted
+      if (ratingType === 'items') {
+        await updateFoodRatings(itemRatings);
+      }
 
       setOrders(orders.map(order =>
-        order.id === selectedOrder.id ? { ...order, rating, review } : order
+        order.id === selectedOrder.id ? { ...order, ...updateData } : order
       ));
 
       setReviewModalVisible(false);
       setSelectedOrder(null);
       setRating(5);
       setReview('');
+      setRestaurantRating(5);
+      setRestaurantReview('');
+      setShipperRating(5);
+      setShipperReview('');
+      setItemRatings({});
+      setRatingType('overall');
       Alert.alert('Thành công', 'Cảm ơn bạn đã đánh giá');
     } catch (error) {
       console.error('Error submitting review:', error);
       Alert.alert('Lỗi', 'Không thể gửi đánh giá');
     } finally {
       setSubmittingReview(false);
+    }
+  };
+
+  const updateRestaurantRating = async (restaurantId: string, newRating: number) => {
+    try {
+      // Get all orders for this restaurant
+      const ordersRef = collection(db, 'orders');
+      const q = query(
+        ordersRef,
+        where('restaurantId', '==', restaurantId),
+        where('restaurantRating', '!=', null)
+      );
+      const snapshot = await getDocs(q);
+      
+      let totalRating = 0;
+      let count = 0;
+      
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.restaurantRating) {
+          totalRating += data.restaurantRating;
+          count++;
+        }
+      });
+      
+      // Add the new rating
+      totalRating += newRating;
+      count++;
+      
+      const averageRating = totalRating / count;
+      
+      // Update restaurant document
+      await updateDoc(doc(db, 'restaurants', restaurantId), {
+        rating: averageRating,
+        totalRatings: count,
+      });
+    } catch (error) {
+      console.error('Error updating restaurant rating:', error);
+    }
+  };
+
+  const updateShipperRating = async (shipperId: string, newRating: number) => {
+    try {
+      // Get all orders for this shipper
+      const ordersRef = collection(db, 'orders');
+      const q = query(
+        ordersRef,
+        where('shipperId', '==', shipperId),
+        where('shipperRating', '!=', null)
+      );
+      const snapshot = await getDocs(q);
+      
+      let totalRating = 0;
+      let count = 0;
+      
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.shipperRating) {
+          totalRating += data.shipperRating;
+          count++;
+        }
+      });
+      
+      // Add the new rating
+      totalRating += newRating;
+      count++;
+      
+      const averageRating = totalRating / count;
+      
+      // Update shipper document
+      await updateDoc(doc(db, 'users', shipperId), {
+        rating: averageRating,
+        totalRatings: count,
+      });
+    } catch (error) {
+      console.error('Error updating shipper rating:', error);
+    }
+  };
+
+  const updateFoodRatings = async (ratings: { [foodId: string]: { rating: number; review?: string } }) => {
+    try {
+      for (const [foodId, ratingData] of Object.entries(ratings)) {
+        // Get all orders with this food item
+        const ordersRef = collection(db, 'orders');
+        const ordersSnapshot = await getDocs(ordersRef);
+        
+        let totalRating = 0;
+        let count = 0;
+        
+        ordersSnapshot.forEach((doc) => {
+          const orderData = doc.data();
+          const itemRatings = orderData.itemRatings || {};
+          if (itemRatings[foodId]?.rating) {
+            totalRating += itemRatings[foodId].rating;
+            count++;
+          }
+        });
+        
+        // Add the new rating
+        totalRating += ratingData.rating;
+        count++;
+        
+        const averageRating = totalRating / count;
+        
+        // Update food document
+        await updateDoc(doc(db, 'foods', foodId), {
+          rating: averageRating,
+          totalRatings: count,
+        });
+      }
+    } catch (error) {
+      console.error('Error updating food ratings:', error);
     }
   };
 
@@ -364,11 +521,19 @@ const OrdersScreen = () => {
             </TouchableOpacity>
           )}
 
-          {item.status === 'delivered' && !item.rating && (
+          {item.status === 'delivered' && (!item.rating || !item.restaurantRating || (item.shipperId && !item.shipperRating)) && (
             <TouchableOpacity
               style={[styles.actionButton, styles.reviewButton]}
               onPress={() => {
                 setSelectedOrder(item);
+                setRating(item.rating || 5);
+                setReview(item.review || '');
+                setRestaurantRating(item.restaurantRating || 5);
+                setRestaurantReview(item.restaurantReview || '');
+                setShipperRating(item.shipperRating || 5);
+                setShipperReview(item.shipperReview || '');
+                setItemRatings(item.itemRatings || {});
+                setRatingType('overall');
                 setReviewModalVisible(true);
               }}
             >
@@ -627,7 +792,18 @@ const OrdersScreen = () => {
         visible={reviewModalVisible}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setReviewModalVisible(false)}
+        onRequestClose={() => {
+          setReviewModalVisible(false);
+          setSelectedOrder(null);
+          setRating(5);
+          setReview('');
+          setRestaurantRating(5);
+          setRestaurantReview('');
+          setShipperRating(5);
+          setShipperReview('');
+          setItemRatings({});
+          setRatingType('overall');
+        }}
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
@@ -640,55 +816,244 @@ const OrdersScreen = () => {
                   setSelectedOrder(null);
                   setRating(5);
                   setReview('');
+                  setRestaurantRating(5);
+                  setRestaurantReview('');
+                  setShipperRating(5);
+                  setShipperReview('');
+                  setItemRatings({});
+                  setRatingType('overall');
                 }}
               >
                 <Ionicons name="close" size={24} color="#666" />
               </TouchableOpacity>
             </View>
 
-            <View style={styles.ratingPicker}>
-              {[1, 2, 3, 4, 5].map((star) => (
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Rating Type Tabs */}
+              <View style={styles.ratingTypeTabs}>
                 <TouchableOpacity
-                  key={star}
-                  onPress={() => setRating(star)}
-                  style={styles.starButton}
+                  style={[styles.ratingTypeTab, ratingType === 'overall' && styles.ratingTypeTabActive]}
+                  onPress={() => setRatingType('overall')}
                 >
-                  <Ionicons
-                    name={star <= rating ? 'star' : 'star-outline'}
-                    size={40}
-                    color="#FFD700"
-                  />
+                  <Text style={[styles.ratingTypeTabText, ratingType === 'overall' && styles.ratingTypeTabTextActive]}>
+                    Tổng thể
+                  </Text>
                 </TouchableOpacity>
-              ))}
-            </View>
-            <Text style={styles.ratingText}>
-              {rating === 5 ? 'Tuyệt vời!' : rating === 4 ? 'Rất tốt!' : rating === 3 ? 'Tốt!' : rating === 2 ? 'Tạm được' : 'Cần cải thiện'}
-            </Text>
+                {selectedOrder?.restaurantId && (
+                  <TouchableOpacity
+                    style={[styles.ratingTypeTab, ratingType === 'restaurant' && styles.ratingTypeTabActive]}
+                    onPress={() => setRatingType('restaurant')}
+                  >
+                    <Text style={[styles.ratingTypeTabText, ratingType === 'restaurant' && styles.ratingTypeTabTextActive]}>
+                      Nhà hàng
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                {selectedOrder?.shipperId && (
+                  <TouchableOpacity
+                    style={[styles.ratingTypeTab, ratingType === 'shipper' && styles.ratingTypeTabActive]}
+                    onPress={() => setRatingType('shipper')}
+                  >
+                    <Text style={[styles.ratingTypeTabText, ratingType === 'shipper' && styles.ratingTypeTabTextActive]}>
+                      Shipper
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[styles.ratingTypeTab, ratingType === 'items' && styles.ratingTypeTabActive]}
+                  onPress={() => setRatingType('items')}
+                >
+                  <Text style={[styles.ratingTypeTabText, ratingType === 'items' && styles.ratingTypeTabTextActive]}>
+                    Món ăn
+                  </Text>
+                </TouchableOpacity>
+              </View>
 
-            <TextInput
-              style={styles.reviewInput}
-              placeholder="Chia sẻ trải nghiệm của bạn (không bắt buộc)"
-              value={review}
-              onChangeText={setReview}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
-
-            <TouchableOpacity
-              style={[
-                styles.submitButton,
-                submittingReview && styles.submitButtonDisabled
-              ]}
-              onPress={handleSubmitReview}
-              disabled={submittingReview}
-            >
-              {submittingReview ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <Text style={styles.submitButtonText}>Gửi đánh giá</Text>
+              {/* Overall Rating */}
+              {ratingType === 'overall' && (
+                <>
+                  <View style={styles.ratingPicker}>
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <TouchableOpacity
+                        key={star}
+                        onPress={() => setRating(star)}
+                        style={styles.starButton}
+                      >
+                        <Ionicons
+                          name={star <= rating ? 'star' : 'star-outline'}
+                          size={40}
+                          color="#FFD700"
+                        />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <Text style={styles.ratingText}>
+                    {rating === 5 ? 'Tuyệt vời!' : rating === 4 ? 'Rất tốt!' : rating === 3 ? 'Tốt!' : rating === 2 ? 'Tạm được' : 'Cần cải thiện'}
+                  </Text>
+                  <TextInput
+                    style={styles.reviewInput}
+                    placeholder="Chia sẻ trải nghiệm của bạn (không bắt buộc)"
+                    value={review}
+                    onChangeText={setReview}
+                    multiline
+                    numberOfLines={4}
+                    textAlignVertical="top"
+                  />
+                </>
               )}
-            </TouchableOpacity>
+
+              {/* Restaurant Rating */}
+              {ratingType === 'restaurant' && selectedOrder?.restaurantId && (
+                <>
+                  <View style={styles.ratingSectionHeader}>
+                    <Text style={styles.ratingSectionTitle}>Đánh giá nhà hàng</Text>
+                    <Text style={styles.ratingSectionSubtitle}>{selectedOrder.restaurantName}</Text>
+                  </View>
+                  <View style={styles.ratingPicker}>
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <TouchableOpacity
+                        key={star}
+                        onPress={() => setRestaurantRating(star)}
+                        style={styles.starButton}
+                      >
+                        <Ionicons
+                          name={star <= restaurantRating ? 'star' : 'star-outline'}
+                          size={40}
+                          color="#FFD700"
+                        />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <Text style={styles.ratingText}>
+                    {restaurantRating === 5 ? 'Tuyệt vời!' : restaurantRating === 4 ? 'Rất tốt!' : restaurantRating === 3 ? 'Tốt!' : restaurantRating === 2 ? 'Tạm được' : 'Cần cải thiện'}
+                  </Text>
+                  <TextInput
+                    style={styles.reviewInput}
+                    placeholder="Chia sẻ đánh giá về nhà hàng (không bắt buộc)"
+                    value={restaurantReview}
+                    onChangeText={setRestaurantReview}
+                    multiline
+                    numberOfLines={4}
+                    textAlignVertical="top"
+                  />
+                </>
+              )}
+
+              {/* Shipper Rating */}
+              {ratingType === 'shipper' && selectedOrder?.shipperId && (
+                <>
+                  <View style={styles.ratingSectionHeader}>
+                    <Text style={styles.ratingSectionTitle}>Đánh giá shipper</Text>
+                  </View>
+                  <View style={styles.ratingPicker}>
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <TouchableOpacity
+                        key={star}
+                        onPress={() => setShipperRating(star)}
+                        style={styles.starButton}
+                      >
+                        <Ionicons
+                          name={star <= shipperRating ? 'star' : 'star-outline'}
+                          size={40}
+                          color="#FFD700"
+                        />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <Text style={styles.ratingText}>
+                    {shipperRating === 5 ? 'Tuyệt vời!' : shipperRating === 4 ? 'Rất tốt!' : shipperRating === 3 ? 'Tốt!' : shipperRating === 2 ? 'Tạm được' : 'Cần cải thiện'}
+                  </Text>
+                  <TextInput
+                    style={styles.reviewInput}
+                    placeholder="Chia sẻ đánh giá về shipper (không bắt buộc)"
+                    value={shipperReview}
+                    onChangeText={setShipperReview}
+                    multiline
+                    numberOfLines={4}
+                    textAlignVertical="top"
+                  />
+                </>
+              )}
+
+              {/* Item Ratings */}
+              {ratingType === 'items' && selectedOrder && (
+                <>
+                  <View style={styles.ratingSectionHeader}>
+                    <Text style={styles.ratingSectionTitle}>Đánh giá món ăn</Text>
+                  </View>
+                  {selectedOrder.items.map((item, index) => {
+                    const currentRating = itemRatings[item.foodId]?.rating || 5;
+                    const currentReview = itemRatings[item.foodId]?.review || '';
+                    return (
+                      <View key={index} style={styles.itemRatingCard}>
+                        <View style={styles.itemRatingHeader}>
+                          <Image source={{ uri: item.imageUrl }} style={styles.itemRatingImage} />
+                          <View style={styles.itemRatingInfo}>
+                            <Text style={styles.itemRatingName}>{item.name}</Text>
+                            <Text style={styles.itemRatingQuantity}>Số lượng: x{item.quantity}</Text>
+                          </View>
+                        </View>
+                        <View style={styles.ratingPicker}>
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <TouchableOpacity
+                              key={star}
+                              onPress={() => {
+                                setItemRatings({
+                                  ...itemRatings,
+                                  [item.foodId]: {
+                                    rating: star,
+                                    review: itemRatings[item.foodId]?.review || '',
+                                  },
+                                });
+                              }}
+                              style={styles.starButton}
+                            >
+                              <Ionicons
+                                name={star <= currentRating ? 'star' : 'star-outline'}
+                                size={30}
+                                color="#FFD700"
+                              />
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                        <TextInput
+                          style={styles.itemReviewInput}
+                          placeholder="Đánh giá món này (không bắt buộc)"
+                          value={currentReview}
+                          onChangeText={(text) => {
+                            setItemRatings({
+                              ...itemRatings,
+                              [item.foodId]: {
+                                rating: currentRating,
+                                review: text,
+                              },
+                            });
+                          }}
+                          multiline
+                          numberOfLines={2}
+                          textAlignVertical="top"
+                        />
+                      </View>
+                    );
+                  })}
+                </>
+              )}
+
+              <TouchableOpacity
+                style={[
+                  styles.submitButton,
+                  submittingReview && styles.submitButtonDisabled
+                ]}
+                onPress={handleSubmitReview}
+                disabled={submittingReview}
+              >
+                {submittingReview ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.submitButtonText}>Gửi đánh giá</Text>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -1178,6 +1543,83 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginTop: 12,
     gap: 8,
+  },
+  ratingTypeTabs: {
+    flexDirection: 'row',
+    marginBottom: 20,
+    gap: 8,
+  },
+  ratingTypeTab: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#F5F7FA',
+    alignItems: 'center',
+  },
+  ratingTypeTabActive: {
+    backgroundColor: '#ee4d2d',
+  },
+  ratingTypeTabText: {
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '500',
+  },
+  ratingTypeTabTextActive: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  ratingSectionHeader: {
+    marginBottom: 16,
+  },
+  ratingSectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 4,
+  },
+  ratingSectionSubtitle: {
+    fontSize: 14,
+    color: '#666',
+  },
+  itemRatingCard: {
+    backgroundColor: '#F5F7FA',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  itemRatingHeader: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  itemRatingImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  itemRatingInfo: {
+    flex: 1,
+  },
+  itemRatingName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  itemRatingQuantity: {
+    fontSize: 13,
+    color: '#666',
+  },
+  itemReviewInput: {
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 14,
+    marginTop: 12,
+    backgroundColor: '#fff',
+    minHeight: 60,
   },
 });
 
