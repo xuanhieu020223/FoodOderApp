@@ -105,15 +105,19 @@ const Register = () => {
       ]);
 
     } catch (error: any) {
-      console.log(error.code);
+      // Xử lý lỗi đăng ký với thông báo thân thiện
       if (error.code === 'auth/email-already-in-use') {
-        Alert.alert('Lỗi', 'Email đã được sử dụng.');
+        Alert.alert('Lỗi', 'Email đã được sử dụng. Vui lòng sử dụng email khác.');
       } else if (error.code === 'auth/invalid-email') {
-        Alert.alert('Lỗi', 'Email không hợp lệ.');
+        Alert.alert('Lỗi', 'Email không hợp lệ. Vui lòng kiểm tra lại.');
       } else if (error.code === 'auth/weak-password') {
-        Alert.alert('Lỗi', 'Mật khẩu quá yếu.');
+        Alert.alert('Lỗi', 'Mật khẩu quá yếu. Vui lòng sử dụng mật khẩu mạnh hơn (ít nhất 6 ký tự).');
+      } else if (error.code === 'auth/operation-not-allowed') {
+        Alert.alert('Lỗi', 'Phương thức đăng ký này không được phép.');
+      } else if (error.code === 'auth/network-request-failed') {
+        Alert.alert('Lỗi', 'Lỗi kết nối mạng. Vui lòng kiểm tra kết nối và thử lại.');
       } else {
-        Alert.alert('Lỗi', 'Có lỗi xảy ra. Vui lòng thử lại.');
+        Alert.alert('Lỗi', 'Có lỗi xảy ra khi đăng ký. Vui lòng thử lại sau.');
       }
     }
   };

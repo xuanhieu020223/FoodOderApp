@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Image, TouchableOpacity, StyleSheet, Text, Modal } from 'react-native';
-import { Camera, CameraType, FlashMode } from 'expo-camera';
+import { CameraView, CameraType, useCameraPermissions, FlashMode } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -11,31 +11,23 @@ interface ImagePickerProps {
 export const CustomImagePicker: React.FC<ImagePickerProps> = ({ onImageSelected }) => {
   const [image, setImage] = useState<string | null>(null);
   const [showCamera, setShowCamera] = useState(false);
-  const [cameraType, setCameraType] = useState<CameraType>(CameraType.back);
-  const [flashMode, setFlashMode] = useState<FlashMode>(FlashMode.off);
-  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
-  const cameraRef = useRef<Camera | null>(null);
-
-  useEffect(() => {
-    (async () => {
-      console.log('Checking initial camera permissions...');
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      console.log('Initial camera permission status:', status);
-      setHasCameraPermission(status === 'granted');
-    })();
-  }, []);
+  const [cameraType, setCameraType] = useState<CameraType>('back');
+  const [flashMode, setFlashMode] = useState<FlashMode>('off');
+  const [permission, requestPermission] = useCameraPermissions();
+  const cameraRef = useRef<CameraView | null>(null);
 
   const requestPermissions = async () => {
     try {
       console.log('Requesting camera permissions...');
-      const { status: cameraStatus } = await Camera.requestCameraPermissionsAsync();
-      console.log('Camera permission status:', cameraStatus);
-      setHasCameraPermission(cameraStatus === 'granted');
+      if (!permission?.granted) {
+        const result = await requestPermission();
+        console.log('Camera permission status:', result.granted);
+      }
       
       const { status: libraryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       console.log('Library permission status:', libraryStatus);
       
-      return cameraStatus === 'granted' && libraryStatus === 'granted';
+      return (permission?.granted || false) && libraryStatus === 'granted';
     } catch (error) {
       console.error('Error requesting permissions:', error);
       return false;
@@ -69,9 +61,11 @@ export const CustomImagePicker: React.FC<ImagePickerProps> = ({ onImageSelected 
         quality: 1,
         base64: false,
       });
-      setImage(photo.uri);
-      onImageSelected(photo.uri);
-      setShowCamera(false);
+      if (photo) {
+        setImage(photo.uri);
+        onImageSelected(photo.uri);
+        setShowCamera(false);
+      }
     } catch (error) {
       console.error('Error taking picture:', error);
       alert('Không thể chụp ảnh. Vui lòng thử lại!');
@@ -127,18 +121,12 @@ export const CustomImagePicker: React.FC<ImagePickerProps> = ({ onImageSelected 
       )}
 
       <Modal visible={showCamera} animationType="slide">
-        {hasCameraPermission ? (
-          <Camera
+        {permission?.granted ? (
+          <CameraView
             ref={cameraRef}
             style={[styles.camera, { backgroundColor: 'transparent' }]}
-            type={cameraType}
-            flashMode={flashMode}
-            onCameraReady={() => console.log('Camera is ready')}
-            onMountError={(error) => {
-              console.error('Camera mount error:', error);
-              setShowCamera(false);
-              alert('Không thể khởi tạo camera. Vui lòng thử lại!');
-            }}
+            facing={cameraType}
+            flash={flashMode}
           >
             <View style={styles.cameraControls}>
               <TouchableOpacity
@@ -156,7 +144,7 @@ export const CustomImagePicker: React.FC<ImagePickerProps> = ({ onImageSelected 
               <TouchableOpacity
                 style={styles.cameraButton}
                 onPress={() => setCameraType(
-                  cameraType === CameraType.back ? CameraType.front : CameraType.back
+                  cameraType === 'back' ? 'front' : 'back'
                 )}
               >
                 <Ionicons name="camera-reverse" size={24} color="#fff" />
@@ -164,16 +152,16 @@ export const CustomImagePicker: React.FC<ImagePickerProps> = ({ onImageSelected 
             </View>
             <TouchableOpacity
               onPress={() => setFlashMode(
-                flashMode === FlashMode.off ? FlashMode.on : FlashMode.off
+                flashMode === 'off' ? 'on' : 'off'
               )}
               style={[
                 styles.flashButton,
-                { backgroundColor: flashMode === FlashMode.off ? '#000' : '#fff' }
+                { backgroundColor: flashMode === 'off' ? '#000' : '#fff' }
               ]}
             >
               <Text style={{ fontSize: 20 }}>⚡️</Text>
             </TouchableOpacity>
-          </Camera>
+          </CameraView>
         ) : (
           <View style={styles.noCameraPermission}>
             <Text style={styles.noCameraText}>Không có quyền truy cập camera</Text>

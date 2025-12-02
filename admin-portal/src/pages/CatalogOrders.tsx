@@ -1,11 +1,15 @@
-import { useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { FiEdit, FiTrash2 } from 'react-icons/fi';
 import StatusBadge from '../components/StatusBadge';
-import { fetchCategories } from '../services/categoryService';
+import { deleteCategory, fetchCategories } from '../services/categoryService';
 import { fetchLatestOrders, subscribeLatestOrders } from '../services/orderService';
 
 const CatalogOrders = () => {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
 
   const {
     data: categories = [],
@@ -27,12 +31,29 @@ const CatalogOrders = () => {
     staleTime: 1000 * 30,
   });
 
+  const { mutateAsync: handleDeleteCategory, isPending: isDeleting } = useMutation({
+    mutationFn: deleteCategory,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories', 'list'] });
+      setError(null);
+    },
+    onError: () => {
+      setError('Không thể xóa danh mục.');
+    },
+  });
+
   useEffect(() => {
     const unsubscribe = subscribeLatestOrders(15, (next) => {
       queryClient.setQueryData(['orders', 'latest'], next);
     });
     return unsubscribe;
   }, [queryClient]);
+
+  const handleDelete = async (id: string) => {
+    if (window.confirm('Bạn có chắc chắn muốn xóa danh mục này?')) {
+      await handleDeleteCategory(id);
+    }
+  };
 
   const loading = categoriesLoading || ordersLoading;
   const errorMessage = categoriesError || ordersError ? 'Không thể tải dữ liệu danh mục/đơn hàng.' : null;
@@ -48,7 +69,9 @@ const CatalogOrders = () => {
         </div>
         <div className="page__actions">
           <button className="btn btn--ghost">Đồng bộ POS</button>
-          <button className="btn btn--primary">Thêm danh mục</button>
+          <button className="btn btn--primary" onClick={() => navigate('/catalog-orders/add-category')}>
+            Thêm danh mục
+          </button>
         </div>
       </div>
 
@@ -66,19 +89,38 @@ const CatalogOrders = () => {
           ) : errorMessage ? (
             <div className="panel__empty error">{errorMessage}</div>
           ) : (
-            <div className="category-grid">
-              {categories.map((cat) => (
-                <div key={cat.id} className="category-card">
-                  <span className="category-card__icon">{cat.icon || '🍽️'}</span>
-                  <div>
-                    <p className="category-card__title">{cat.name}</p>
-                    <p className="category-card__subtitle">Priority #{cat.priority ?? '-'}</p>
+            <>
+              <div className="category-grid">
+                {categories.map((cat) => (
+                  <div key={cat.id} className="category-card">
+                    <span className="category-card__icon">{cat.icon || '🍽️'}</span>
+                    <div style={{ flex: 1 }}>
+                      <p className="category-card__title">{cat.name}</p>
+                      <p className="category-card__subtitle">Priority #{cat.priority ?? '-'}</p>
+                    </div>
+                    <div className="category-card__actions">
+                      <button
+                        className="btn btn--icon"
+                        onClick={() => navigate(`/catalog-orders/categories/${cat.id}/edit`)}
+                        title="Chỉnh sửa"
+                      >
+                        <FiEdit />
+                      </button>
+                      <button
+                        className="btn btn--icon btn--danger"
+                        onClick={() => handleDelete(cat.id)}
+                        disabled={isDeleting}
+                        title="Xóa"
+                      >
+                        <FiTrash2 />
+                      </button>
+                    </div>
                   </div>
-                  <span className="category-card__updated">ID: {cat.id}</span>
-                </div>
-              ))}
-              {!categories.length && <p className="panel__empty">Chưa có danh mục nào.</p>}
-            </div>
+                ))}
+                {!categories.length && <p className="panel__empty">Chưa có danh mục nào.</p>}
+              </div>
+              {error && <div className="panel__empty error" style={{ marginTop: '16px' }}>{error}</div>}
+            </>
           )}
         </div>
 

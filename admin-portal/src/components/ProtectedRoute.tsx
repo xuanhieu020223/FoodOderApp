@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { useAuth } from '../context/AuthContext';
 
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
-  const { firebaseUser, isAdmin, loading } = useAuth();
+  const { firebaseUser, isAdmin, loading, error } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -15,18 +15,21 @@ const ProtectedRoute = ({ children }: { children: ReactNode }) => {
     );
   }
 
-  if (!firebaseUser) {
-    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
-  }
-
-  if (!isAdmin) {
+  if (error || !isAdmin) {
     return (
       <Navigate
         to="/login"
-        state={{ from: location.pathname, reason: 'no-permission' }}
+        state={{
+          from: location.pathname,
+          reason: error ? 'profile-error' : 'no-permission',
+        }}
         replace
       />
     );
+  }
+
+  if (!firebaseUser) {
+    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   }
 
   return <>{children}</>;

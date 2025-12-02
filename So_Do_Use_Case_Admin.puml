@@ -1,0 +1,34 @@
+@startuml
+title Use Case Diagram - Quản trị viên (Admin)
+
+left to right direction
+skinparam actorStyle awesome
+
+actor "Quản trị viên" as Admin
+
+rectangle "Admin Portal" {
+  usecase "Đăng nhập" as A_Login
+  usecase "Quản lý người dùng" as A_Users
+  usecase "Quản lý danh mục & đơn" as A_Orders
+  usecase "Quản lý khuyến mãi" as A_Promo
+  usecase "Báo cáo & phân tích" as A_Report
+  usecase "Quản lý ticket hỗ trợ" as A_Support
+  usecase "Cấu hình hệ thống" as A_Config
+}
+
+Admin --> A_Login
+Admin --> A_Users
+Admin --> A_Orders
+Admin --> A_Promo
+Admin --> A_Report
+Admin --> A_Support
+Admin --> A_Config
+
+A_Orders ..> A_Users : <<include>>
+A_Promo ..> A_Users : <<include>>
+A_Report ..> A_Orders : <<include>>
+A_Support ..> A_Users : <<include>>
+A_Config ..> A_Report : <<extend>>
+
+@enduml
+

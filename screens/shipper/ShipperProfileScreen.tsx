@@ -19,12 +19,98 @@ const ShipperProfileScreen = ({ navigation }: any) => {
   const [editAddress, setEditAddress] = useState('');
   const [saving, setSaving] = useState(false);
   const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
+  const [isOnline, setIsOnline] = useState(false);
+  const [ratings, setRatings] = useState<any[]>([]);
+  const [ratingStats, setRatingStats] = useState({
+    average: 0,
+    punctuality: 0,
+    service: 0,
+    communication: 0,
+    total: 0,
+  });
   const user = auth.currentUser;
 
   useEffect(() => {
     fetchUser();
     fetchStats();
+    fetchRatings();
+    checkOnlineStatus();
   }, []);
+
+  const checkOnlineStatus = async () => {
+    try {
+      if (!user?.uid) return;
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      const data = userDoc.data();
+      setIsOnline(data?.isOnline || false);
+    } catch (e) {
+      console.error('Error checking online status:', e);
+    }
+  };
+
+  const toggleOnlineStatus = async () => {
+    try {
+      if (!user?.uid) return;
+      const newStatus = !isOnline;
+      await updateDoc(doc(db, 'users', user.uid), {
+        isOnline: newStatus,
+        lastOnlineUpdate: new Date(),
+      });
+      setIsOnline(newStatus);
+      Alert.alert('Thành công', newStatus ? 'Bạn đã chuyển sang trạng thái online' : 'Bạn đã chuyển sang trạng thái offline');
+    } catch (e) {
+      console.error('Error updating online status:', e);
+      Alert.alert('Lỗi', 'Không thể cập nhật trạng thái');
+    }
+  };
+
+  const fetchRatings = async () => {
+    try {
+      if (!user?.uid) return;
+      const ordersRef = collection(db, 'orders');
+      const q = query(
+        ordersRef,
+        where('shipperId', '==', user.uid),
+        where('status', '==', 'delivered')
+      );
+      const snapshot = await getDocs(q);
+      
+      const ratingList: any[] = [];
+      let totalPunctuality = 0;
+      let totalService = 0;
+      let totalCommunication = 0;
+      let count = 0;
+
+      snapshot.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.rating) {
+          ratingList.push({
+            id: docSnap.id,
+            ...data.rating,
+            orderId: docSnap.id,
+            createdAt: data.deliveredAt,
+          });
+          totalPunctuality += data.rating.punctuality || 0;
+          totalService += data.rating.service || 0;
+          totalCommunication += data.rating.communication || 0;
+          count++;
+        }
+      });
+
+      setRatings(ratingList);
+      if (count > 0) {
+        setRatingStats({
+          average: (totalPunctuality + totalService + totalCommunication) / (count * 3),
+          punctuality: totalPunctuality / count,
+          service: totalService / count,
+          communication: totalCommunication / count,
+          total: count,
+        });
+      }
+    } catch (e) {
+      console.error('Error fetching ratings:', e);
+    }
+  };
 
   const fetchUser = async () => {
     setLoading(true);
@@ -187,6 +273,33 @@ const ShipperProfileScreen = ({ navigation }: any) => {
           </View>
         </View>
 
+        {/* Online Status Toggle */}
+        <View style={styles.infoSection}>
+          <View style={styles.onlineStatusCard}>
+            <View style={styles.onlineStatusRow}>
+              <View style={styles.onlineStatusLeft}>
+                <View style={[styles.onlineStatusIndicator, isOnline && styles.onlineStatusIndicatorActive]} />
+                <View>
+                  <Text style={styles.onlineStatusTitle}>
+                    {isOnline ? 'Đang online' : 'Đang offline'}
+                  </Text>
+                  <Text style={styles.onlineStatusSubtitle}>
+                    {isOnline ? 'Bạn đang nhận đơn hàng' : 'Bạn không nhận đơn hàng'}
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={[styles.onlineToggle, isOnline && styles.onlineToggleActive]}
+                onPress={toggleOnlineStatus}
+              >
+                <Text style={[styles.onlineToggleText, isOnline && styles.onlineToggleTextActive]}>
+                  {isOnline ? 'Tắt' : 'Bật'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
         {/* Statistics Cards */}
         <View style={styles.statsContainer}>
           <View style={[styles.statCard, styles.primaryStatCard]}>
@@ -294,12 +407,76 @@ const ShipperProfileScreen = ({ navigation }: any) => {
           </TouchableOpacity>
         </View>
 
+        {/* Ratings Section */}
+        {ratingStats.total > 0 && (
+          <View style={styles.infoSection}>
+            <View style={styles.sectionHeader}>
+              <MaterialIcons name="star" size={20} color="#ee4d2d" />
+              <Text style={styles.sectionTitle}>Đánh giá ({ratingStats.total})</Text>
+            </View>
+
+            <View style={styles.ratingsCard}>
+              <View style={styles.ratingSummary}>
+                <Text style={styles.ratingAverage}>{ratingStats.average.toFixed(1)}</Text>
+                <View style={styles.ratingStars}>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <MaterialIcons
+                      key={star}
+                      name={star <= Math.round(ratingStats.average) ? 'star' : 'star-border'}
+                      size={20}
+                      color="#FFC107"
+                    />
+                  ))}
+                </View>
+                <Text style={styles.ratingCount}>{ratingStats.total} đánh giá</Text>
+              </View>
+
+              <View style={styles.ratingDetails}>
+                <View style={styles.ratingDetailRow}>
+                  <Text style={styles.ratingDetailLabel}>Đúng giờ</Text>
+                  <View style={styles.ratingBarContainer}>
+                    <View style={[styles.ratingBar, { width: `${(ratingStats.punctuality / 5) * 100}%` }]} />
+                  </View>
+                  <Text style={styles.ratingDetailValue}>{ratingStats.punctuality.toFixed(1)}</Text>
+                </View>
+                <View style={styles.ratingDetailRow}>
+                  <Text style={styles.ratingDetailLabel}>Dịch vụ</Text>
+                  <View style={styles.ratingBarContainer}>
+                    <View style={[styles.ratingBar, { width: `${(ratingStats.service / 5) * 100}%` }]} />
+                  </View>
+                  <Text style={styles.ratingDetailValue}>{ratingStats.service.toFixed(1)}</Text>
+                </View>
+                <View style={styles.ratingDetailRow}>
+                  <Text style={styles.ratingDetailLabel}>Giao tiếp</Text>
+                  <View style={styles.ratingBarContainer}>
+                    <View style={[styles.ratingBar, { width: `${(ratingStats.communication / 5) * 100}%` }]} />
+                  </View>
+                  <Text style={styles.ratingDetailValue}>{ratingStats.communication.toFixed(1)}</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        )}
+
         {/* Settings Section */}
         <View style={styles.infoSection}>
           <View style={styles.sectionHeader}>
             <MaterialIcons name="settings" size={20} color="#ee4d2d" />
             <Text style={styles.sectionTitle}>Cài đặt</Text>
           </View>
+
+          <TouchableOpacity 
+            style={styles.settingsCard}
+            onPress={() => navigation.navigate('Chatbot' as never)}
+          >
+            <View style={styles.settingsRow}>
+              <View style={styles.settingsIconContainer}>
+                <MaterialIcons name="smart-toy" size={22} color="#9C27B0" />
+              </View>
+              <Text style={styles.settingsText}>Chatbot AI hỗ trợ</Text>
+              <MaterialIcons name="chevron-right" size={24} color="#999" />
+            </View>
+          </TouchableOpacity>
 
           <TouchableOpacity style={styles.settingsCard}>
             <View style={styles.settingsRow}>
@@ -816,6 +993,131 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  onlineStatusCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  onlineStatusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  onlineStatusLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  onlineStatusIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#999',
+    marginRight: 12,
+  },
+  onlineStatusIndicatorActive: {
+    backgroundColor: '#4CAF50',
+  },
+  onlineStatusTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#1A1A1A',
+    marginBottom: 2,
+  },
+  onlineStatusSubtitle: {
+    fontSize: 12,
+    color: '#666',
+  },
+  onlineToggle: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    backgroundColor: '#F5F5F5',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  onlineToggleActive: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
+  },
+  onlineToggleText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#666',
+  },
+  onlineToggleTextActive: {
+    color: '#fff',
+  },
+  ratingsCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 12,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  ratingSummary: {
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  ratingAverage: {
+    fontSize: 48,
+    fontWeight: 'bold',
+    color: '#ee4d2d',
+    marginBottom: 8,
+  },
+  ratingStars: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  ratingCount: {
+    fontSize: 14,
+    color: '#666',
+  },
+  ratingDetails: {
+    gap: 16,
+  },
+  ratingDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  ratingDetailLabel: {
+    fontSize: 14,
+    color: '#666',
+    width: 80,
+  },
+  ratingBarContainer: {
+    flex: 1,
+    height: 8,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  ratingBar: {
+    height: '100%',
+    backgroundColor: '#FFC107',
+    borderRadius: 4,
+  },
+  ratingDetailValue: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+    width: 40,
+    textAlign: 'right',
   },
 });
 

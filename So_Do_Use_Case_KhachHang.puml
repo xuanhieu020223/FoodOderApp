@@ -1,0 +1,50 @@
+@startuml
+title Use Case Diagram - Khách hàng (Customer)
+
+left to right direction
+skinparam actorStyle awesome
+
+actor "Khách hàng" as Customer
+
+rectangle "Customer App" {
+  usecase "Đăng ký tài khoản" as C_Register
+  usecase "Đăng nhập" as C_Login
+  usecase "Quản lý hồ sơ &\n cài đặt" as C_Profile
+  usecase "Quản lý địa chỉ" as C_Address
+  usecase "Quản lý phương thức\n thanh toán" as C_Payment
+  usecase "Tìm kiếm & duyệt\n nhà hàng/món" as C_Browse
+  usecase "Quản lý giỏ hàng" as C_Cart
+  usecase "Đặt món & thanh toán" as C_Order
+  usecase "Theo dõi đơn hàng" as C_Track
+  usecase "Quản lý voucher" as C_Voucher
+  usecase "Đánh giá & phản hồi" as C_Review
+  usecase "Thông báo & nhắc nhở" as C_Notify
+  usecase "Trung tâm trợ giúp" as C_Support
+  usecase "Trợ lý AI/Chatbot" as C_Chatbot
+}
+
+Customer --> C_Register
+Customer --> C_Login
+Customer --> C_Profile
+Customer --> C_Address
+Customer --> C_Payment
+Customer --> C_Browse
+Customer --> C_Cart
+Customer --> C_Order
+Customer --> C_Track
+Customer --> C_Voucher
+Customer --> C_Review
+Customer --> C_Notify
+Customer --> C_Support
+Customer --> C_Chatbot
+
+C_Order ..> C_Cart : <<include>>
+C_Order ..> C_Payment : <<include>>
+C_Order ..> C_Address : <<include>>
+C_Order ..> C_Voucher : <<extend>>
+C_Track ..> C_Notify : <<include>>
+C_Support ..> C_Chatbot : <<extend>>
+C_Review ..> C_Order : <<include>>
+
+@enduml
+

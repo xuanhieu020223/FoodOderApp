@@ -6,6 +6,7 @@ import {
 import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../../config/Firebase';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { GOOGLE_MAPS_API_KEY } from '../../config/GoogleMaps';
 
 const ShipperMapScreen = () => {
   const [activeOrders, setActiveOrders] = useState<any[]>([]);
@@ -78,22 +79,85 @@ const ShipperMapScreen = () => {
     });
   };
 
-  const openDirections = (pickupAddress: string, deliveryAddress: string) => {
+  const openDirections = async (pickupAddress: string, deliveryAddress: string) => {
     if (!pickupAddress || !deliveryAddress) {
       Alert.alert('Lỗi', 'Thiếu thông tin địa chỉ');
       return;
     }
+
+    // Lấy tuyến đường tối ưu
+    const optimizedRoute = await getOptimizedRoute(pickupAddress, deliveryAddress);
+    
+    if (optimizedRoute) {
+      const distance = optimizedRoute.legs[0]?.distance?.text || '';
+      const duration = optimizedRoute.legs[0]?.duration?.text || '';
+      Alert.alert(
+        'Tuyến đường tối ưu',
+        `Khoảng cách: ${distance}\nThời gian: ${duration}\n\nĐang mở Google Maps...`
+      );
+    }
+
     const encodedPickup = encodeURIComponent(pickupAddress);
     const encodedDelivery = encodeURIComponent(deliveryAddress);
-    const url = `https://www.google.com/maps/dir/?api=1&origin=${encodedPickup}&destination=${encodedDelivery}`;
+    const url = `https://www.google.com/maps/dir/?api=1&origin=${encodedPickup}&destination=${encodedDelivery}&travelmode=driving`;
     Linking.openURL(url).catch(err => {
       Alert.alert('Lỗi', 'Không thể mở Google Maps. Vui lòng cài đặt ứng dụng Google Maps.');
     });
   };
 
-  const calculateDistance = (address1: string, address2: string) => {
-    // Mock distance calculation - in real app, use geocoding API
+  const calculateDistance = async (address1: string, address2: string) => {
+    try {
+      if (!GOOGLE_MAPS_API_KEY || GOOGLE_MAPS_API_KEY === 'YOUR_API_KEY') {
+        return '~5.2 km';
+      }
+
+      // Sử dụng Google Maps Distance Matrix API
+      const origin = encodeURIComponent(address1);
+      const destination = encodeURIComponent(address2);
+      const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${origin}&destinations=${destination}&key=${GOOGLE_MAPS_API_KEY}&language=vi`;
+
+      const response = await fetch(url);
+      const data = await response.json();
+
+      if (data.status === 'OK' && data.rows[0]?.elements[0]?.distance) {
+        const distance = data.rows[0].elements[0].distance;
+        const distanceKm = (distance.value / 1000).toFixed(1);
+        return `${distanceKm} km`;
+      }
+    } catch (e) {
+      console.error('Error calculating distance:', e);
+    }
     return '~5.2 km';
+  };
+
+  const getOptimizedRoute = async (pickupAddress: string, deliveryAddress: string) => {
+    try {
+      if (!GOOGLE_MAPS_API_KEY || GOOGLE_MAPS_API_KEY === 'YOUR_API_KEY') {
+        return null;
+      }
+
+      // Sử dụng Google Maps Directions API để tối ưu tuyến đường
+      const origin = encodeURIComponent(pickupAddress);
+      const destination = encodeURIComponent(deliveryAddress);
+      const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin}&destination=${destination}&key=${GOOGLE_MAPS_API_KEY}&language=vi&alternatives=true`;
+
+      const response = await fetch(url);
+      const data = await response.json();
+
+      if (data.status === 'OK' && data.routes.length > 0) {
+        // Chọn tuyến đường ngắn nhất
+        const routes = data.routes.sort((a: any, b: any) => {
+          const distanceA = a.legs[0]?.distance?.value || 0;
+          const distanceB = b.legs[0]?.distance?.value || 0;
+          return distanceA - distanceB;
+        });
+
+        return routes[0];
+      }
+    } catch (e) {
+      console.error('Error getting optimized route:', e);
+    }
+    return null;
   };
 
   const getStatusInfo = (status: string) => {
@@ -215,12 +279,7 @@ const ShipperMapScreen = () => {
                       </View>
                       <View style={styles.distanceBadge}>
                         <MaterialIcons name="straighten" size={14} color="#666" />
-                        <Text style={styles.distanceText}>
-                          {calculateDistance(
-                            order.restaurantAddress || '',
-                            order.address || ''
-                          )}
-                        </Text>
+                        <Text style={styles.distanceText}>Đang tính...</Text>
                       </View>
                     </View>
 

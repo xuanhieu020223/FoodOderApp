@@ -1,19 +1,25 @@
 import { NavLink } from 'react-router-dom';
 import {
   FiBarChart2,
+  FiBell,
   FiHeadphones,
   FiHome,
   FiLayers,
   FiPackage,
   FiPercent,
   FiUsers,
+  FiTruck,
+  FiCoffee,
 } from 'react-icons/fi';
 
 const navItems = [
   { label: 'Tổng quan', icon: <FiHome />, path: '/' },
   { label: 'Người dùng', icon: <FiUsers />, path: '/users' },
+  { label: 'Nhà hàng', icon: <FiCoffee />, path: '/restaurants' },
+  { label: 'Tài xế', icon: <FiTruck />, path: '/drivers' },
   { label: 'Danh mục & Đơn', icon: <FiLayers />, path: '/catalog-orders' },
   { label: 'Khuyến mãi', icon: <FiPercent />, path: '/promotions' },
+  { label: 'Thông báo', icon: <FiBell />, path: '/notifications' },
   { label: 'Báo cáo', icon: <FiBarChart2 />, path: '/reports' },
   { label: 'Hỗ trợ', icon: <FiHeadphones />, path: '/support' },
 ];

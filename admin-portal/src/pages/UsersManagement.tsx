@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FiFilter, FiLock, FiRefreshCw, FiUnlock } from 'react-icons/fi';
+import { FiEdit, FiFilter, FiLock, FiRefreshCw, FiSearch, FiTrash2, FiUnlock, FiEye } from 'react-icons/fi';
 import StatusBadge from '../components/StatusBadge';
 import type { UserAccount, UserRole } from '../types';
-import { fetchUsersWithOrderMeta, toggleUserStatus } from '../services/userService';
+import { deleteUser, fetchUsersWithOrderMeta, toggleUserStatus } from '../services/userService';
 
 const roleFilters: { label: string; value: 'all' | UserRole }[] = [
   { label: 'Tất cả', value: 'all' },
@@ -12,10 +13,22 @@ const roleFilters: { label: string; value: 'all' | UserRole }[] = [
   { label: 'Tài xế', value: 'driver' },
 ];
 
+const statusFilters: { label: string; value: 'all' | UserAccount['status'] }[] = [
+  { label: 'Tất cả', value: 'all' },
+  { label: 'Active', value: 'active' },
+  { label: 'Locked', value: 'locked' },
+  { label: 'Pending', value: 'pending' },
+];
+
 const usersQueryKey = ['users', 'list'];
 
 const UsersManagement = () => {
+  const navigate = useNavigate();
   const [filter, setFilter] = useState<'all' | UserRole>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | UserAccount['status']>('all');
+  const [cityFilter, setCityFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
@@ -52,14 +65,67 @@ const UsersManagement = () => {
     },
   });
 
+  const { mutateAsync: handleDelete, isPending: isDeleting } = useMutation({
+    mutationFn: deleteUser,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: usersQueryKey });
+      setError(null);
+    },
+    onError: () => {
+      setError('Không thể xóa tài khoản.');
+    },
+  });
+
   const filteredUsers = useMemo(() => {
-    if (filter === 'all') return records;
-    return records.filter((user) => user.role === filter);
-  }, [records, filter]);
+    let result = records;
+
+    // Filter by role
+    if (filter !== 'all') {
+      result = result.filter((user) => user.role === filter);
+    }
+
+    // Filter by status
+    if (statusFilter !== 'all') {
+      result = result.filter((user) => user.status === statusFilter);
+    }
+
+    // Filter by city
+    if (cityFilter !== 'all') {
+      result = result.filter((user) => user.city?.toLowerCase() === cityFilter.toLowerCase());
+    }
+
+    // Search
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(
+        (user) =>
+          user.name?.toLowerCase().includes(query) ||
+          user.email?.toLowerCase().includes(query) ||
+          user.phone?.includes(query) ||
+          user.id.toLowerCase().includes(query),
+      );
+    }
+
+    return result;
+  }, [records, filter, statusFilter, cityFilter, searchQuery]);
+
+  const uniqueCities = useMemo(() => {
+    const cities = new Set<string>();
+    records.forEach((user) => {
+      if (user.city) cities.add(user.city);
+    });
+    return Array.from(cities).sort();
+  }, [records]);
 
   const handleToggle = async (user: UserAccount) => {
     setError(null);
     await mutateStatus({ id: user.id, currentStatus: user.status });
+  };
+
+  const handleDeleteUser = async (id: string) => {
+    if (window.confirm('Bạn có chắc chắn muốn xóa tài khoản này?')) {
+      await handleDelete(id);
+    }
   };
 
   const displayError = error ?? (queryError ? 'Không thể tải danh sách người dùng.' : null);
@@ -78,11 +144,16 @@ const UsersManagement = () => {
             <FiRefreshCw />
             Làm mới
           </button>
-          <button className="btn btn--ghost">
+          <button
+            className={`btn btn--ghost ${showAdvancedFilters ? 'btn--active' : ''}`}
+            onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+          >
             <FiFilter />
             Bộ lọc nâng cao
           </button>
-          <button className="btn btn--primary">Thêm tài khoản</button>
+          <button className="btn btn--primary" onClick={() => navigate('/users/add')}>
+            Thêm tài khoản
+          </button>
         </div>
       </div>
 
@@ -98,24 +169,51 @@ const UsersManagement = () => {
         ))}
       </div>
 
+      {showAdvancedFilters && (
+        <div className="panel panel--filters">
+          <div className="filters-grid">
+            <div className="form-group">
+              <label>Tìm kiếm</label>
+              <div className="search-input">
+                <FiSearch />
+                <input
+                  type="text"
+                  placeholder="Tìm theo tên, email, số điện thoại, mã..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Lọc theo trạng thái</label>
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}>
+                {statusFilters.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Lọc theo thành phố</label>
+              <select value={cityFilter} onChange={(e) => setCityFilter(e.target.value)}>
+                <option value="all">Tất cả thành phố</option>
+                {uniqueCities.map((city) => (
+                  <option key={city} value={city}>
+                    {city}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="panel panel--table">
         <div className="panel__header">
           <div>
             <h3>Danh sách tài khoản</h3>
             <p>{filteredUsers.length} bản ghi</p>
-          </div>
-          <div className="panel__filters">
-            <select>
-              <option>Tất cả thành phố</option>
-              <option>Hà Nội</option>
-              <option>TP.HCM</option>
-            </select>
-            <select>
-              <option>Trạng thái</option>
-              <option>Active</option>
-              <option>Locked</option>
-              <option>Pending</option>
-            </select>
           </div>
         </div>
 
@@ -124,46 +222,69 @@ const UsersManagement = () => {
         ) : displayError ? (
           <div className="panel__empty error">{displayError}</div>
         ) : (
-          <div className="table">
-            <div className="table__head">
-              <span>Mã</span>
-              <span>Tên hiển thị</span>
-              <span>Vai trò</span>
-              <span>Hoạt động</span>
-              <span>Trạng thái</span>
-              <span>Hành động</span>
-            </div>
-            {filteredUsers.map((user) => (
-              <div key={user.id} className="table__row">
-                <span>{user.id}</span>
-                <span>
-                  <p className="table__title">{user.name}</p>
-                  <p className="table__subtitle">{user.email}</p>
-                </span>
-                <span className={`tag tag--${user.role}`}>{user.role}</span>
-                <span>
-                  <p>{user.orders?.toLocaleString('vi-VN') || '-'}</p>
-                  <p className="table__subtitle">Đơn</p>
-                </span>
-                <span>
-                  <StatusBadge status={user.status} />
-                </span>
-                <span>
-                  <button className="btn btn--ghost" onClick={() => handleToggle(user)} disabled={isMutating}>
-                    {user.status === 'locked' ? (
-                      <>
-                        <FiUnlock /> Mở khóa
-                      </>
-                    ) : (
-                      <>
-                        <FiLock /> Khóa
-                      </>
-                    )}
-                  </button>
-                </span>
+          <div className="table-wrapper">
+            <div className="table">
+              <div className="table__head">
+                <span>Mã</span>
+                <span>Tên hiển thị</span>
+                <span>Vai trò</span>
+                <span>Hoạt động</span>
+                <span>Trạng thái</span>
+                <span>Hành động</span>
               </div>
-            ))}
-            {!filteredUsers.length && <div className="panel__empty">Không có tài khoản phù hợp.</div>}
+              {filteredUsers.map((user) => (
+                <div key={user.id} className="table__row">
+                  <span className="table__cell">{user.id}</span>
+                  <span className="table__cell">
+                    <p className="table__title">{user.name}</p>
+                    <p className="table__subtitle">{user.email}</p>
+                  </span>
+                  <span className="table__cell">
+                    <span className={`tag tag--${user.role}`}>{user.role}</span>
+                  </span>
+                  <span className="table__cell">
+                    <p>{user.orders?.toLocaleString('vi-VN') || '-'}</p>
+                    <p className="table__subtitle">Đơn</p>
+                  </span>
+                  <span className="table__cell">
+                    <StatusBadge status={user.status} />
+                  </span>
+                  <span className="table__cell table__actions">
+                    <button
+                      className="btn btn--icon"
+                      onClick={() => navigate(`/users/${user.id}`)}
+                      title="Xem chi tiết"
+                    >
+                      <FiEye />
+                    </button>
+                    <button
+                      className="btn btn--icon"
+                      onClick={() => navigate(`/users/${user.id}/edit`)}
+                      title="Chỉnh sửa"
+                    >
+                      <FiEdit />
+                    </button>
+                    <button
+                      className="btn btn--icon"
+                      onClick={() => handleToggle(user)}
+                      disabled={isMutating}
+                      title={user.status === 'locked' ? 'Mở khóa' : 'Khóa'}
+                    >
+                      {user.status === 'locked' ? <FiUnlock /> : <FiLock />}
+                    </button>
+                    <button
+                      className="btn btn--icon btn--danger"
+                      onClick={() => handleDeleteUser(user.id)}
+                      disabled={isDeleting}
+                      title="Xóa"
+                    >
+                      <FiTrash2 />
+                    </button>
+                  </span>
+                </div>
+              ))}
+              {!filteredUsers.length && <div className="panel__empty">Không có tài khoản phù hợp.</div>}
+            </div>
           </div>
         )}
       </div>
@@ -172,4 +293,3 @@ const UsersManagement = () => {
 };
 
 export default UsersManagement;
-

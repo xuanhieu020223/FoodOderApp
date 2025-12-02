@@ -14,10 +14,11 @@ import {
   TextInput,
 } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { collection, query, getDocs, doc, updateDoc, where, orderBy, getDoc } from 'firebase/firestore';
+import { collection, query, getDocs, doc, updateDoc, where, orderBy, getDoc, addDoc } from 'firebase/firestore';
 import { auth, db } from '../../config/Firebase';
 import { useNavigation } from '@react-navigation/native';
 import RestaurantScreenWrapper from '../../components/RestaurantScreenWrapper';
+import { Card, Button, Tag, Badge, Empty } from '../../components/admin/AntDesignComponents';
 
 type OrderStatus = 'pending' | 'confirmed' | 'preparing' | 'shipping' | 'delivered' | 'cancelled';
 
@@ -183,7 +184,6 @@ const ManageOrdersScreen = () => {
       setOrders(ordersData);
     } catch (error) {
       console.error('Error loading orders:', error);
-      Alert.alert('Lỗi', 'Không thể tải danh sách đơn hàng');
     } finally {
       setLoading(false);
     }
@@ -203,7 +203,6 @@ const ManageOrdersScreen = () => {
       setShippers(shippersData);
     } catch (error) {
       console.error('Error loading shippers:', error);
-      Alert.alert('Lỗi', 'Không thể tải danh sách shipper');
     }
   };
 
@@ -216,9 +215,57 @@ const ManageOrdersScreen = () => {
       ));
       
       Alert.alert('Thành công', 'Đã cập nhật trạng thái đơn hàng');
+
+      // Gửi thông báo cho khách hàng khi trạng thái đơn hàng thay đổi
+      const updatedOrder = orders.find(o => o.id === orderId);
+      if (updatedOrder && updatedOrder.userId) {
+        let title = 'Cập nhật đơn hàng';
+        let content = '';
+
+        switch (newStatus) {
+          case 'confirmed':
+            title = 'Đơn hàng đã được nhà hàng xác nhận';
+            content = `Đơn hàng #${orderId.slice(0, 8)} tại ${updatedOrder.restaurantName} đã được xác nhận. Nhà hàng sẽ bắt đầu chuẩn bị món cho bạn.`;
+            break;
+          case 'preparing':
+            title = 'Đơn hàng đang được chuẩn bị';
+            content = `Đơn hàng #${orderId.slice(0, 8)} đang được nhà hàng chuẩn bị.`;
+            break;
+          case 'shipping':
+            title = 'Đơn hàng đang được giao';
+            content = `Đơn hàng #${orderId.slice(0, 8)} đang được giao đến bạn. Vui lòng để ý điện thoại.`;
+            break;
+          case 'delivered':
+            title = 'Đơn hàng đã giao thành công';
+            content = `Đơn hàng #${orderId.slice(0, 8)} đã được giao thành công. Chúc bạn ngon miệng!`;
+            break;
+          case 'cancelled':
+            title = 'Đơn hàng đã bị hủy';
+            content = `Đơn hàng #${orderId.slice(0, 8)} đã bị hủy. Nếu cần hỗ trợ, vui lòng liên hệ trung tâm trợ giúp.`;
+            break;
+          default:
+            break;
+        }
+
+        if (content) {
+          try {
+            await addDoc(collection(db, 'notifications'), {
+              to: updatedOrder.userId,
+              target: 'customer',
+              type: 'order',
+              title,
+              content,
+              orderId,
+              createdAt: new Date(),
+              read: false,
+            });
+          } catch (e) {
+            console.error('Error creating customer order status notification:', e);
+          }
+        }
+      }
     } catch (error) {
       console.error('Error updating order status:', error);
-      Alert.alert('Lỗi', 'Không thể cập nhật trạng thái đơn hàng');
     }
   };
 
@@ -236,7 +283,6 @@ const ManageOrdersScreen = () => {
       Alert.alert('Thành công', 'Đã gán đơn hàng cho shipper');
     } catch (error) {
       console.error('Error assigning shipper:', error);
-      Alert.alert('Lỗi', 'Không thể gán đơn hàng cho shipper');
     }
   };
 
@@ -272,8 +318,12 @@ const ManageOrdersScreen = () => {
   };
 
   const renderOrderItem = ({ item }: { item: Order }) => (
-    <TouchableOpacity
+    <Card
       style={styles.orderCard}
+      bordered={true}
+      shadow={true}
+    >
+      <TouchableOpacity
       onPress={() => {
         setSelectedOrder(item);
         setModalVisible(true);
@@ -284,10 +334,12 @@ const ManageOrdersScreen = () => {
           <Text style={styles.orderId}>Đơn #{item.id.slice(0, 8)}</Text>
           <Text style={styles.orderTime}>{formatDate(item.createdAt)}</Text>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: OrderStatusColor[item.status] }]}>
-          <MaterialIcons name={OrderStatusIcon[item.status]} size={16} color="#fff" />
-          <Text style={styles.statusText}>{OrderStatusText[item.status] || 'Không xác định'}</Text>
-        </View>
+          <Tag color={OrderStatusColor[item.status]}>
+            <MaterialIcons name={OrderStatusIcon[item.status]} size={14} color={OrderStatusColor[item.status]} />
+            <Text style={[styles.statusText, { color: OrderStatusColor[item.status], marginLeft: 4 }]}>
+              {OrderStatusText[item.status] || 'Không xác định'}
+            </Text>
+          </Tag>
       </View>
 
       <View style={styles.customerInfo}>
@@ -321,6 +373,7 @@ const ManageOrdersScreen = () => {
         </Text>
       </View>
     </TouchableOpacity>
+    </Card>
   );
 
   const OrderDetailsModal = () => {
@@ -457,7 +510,7 @@ const ManageOrdersScreen = () => {
 
   const handleAssignShipperPress = () => {
     if (shippers.length === 0) {
-      Alert.alert('Thông báo', 'Không có shipper nào khả dụng');
+      console.warn('No available shippers to assign');
       return;
     }
     setAssignShipperModalVisible(true);
@@ -620,16 +673,16 @@ const ManageOrdersScreen = () => {
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
             }
-            ListEmptyComponent={() => (
-              <View style={styles.emptyContainer}>
-                <MaterialIcons name="inbox" size={64} color="#ccc" />
-                <Text style={styles.emptyText}>
-                  {statusFilter === 'all'
+            ListEmptyComponent={
+              <Empty
+                description={
+                  statusFilter === 'all'
                     ? 'Chưa có đơn hàng nào'
-                    : `Không có đơn hàng ${OrderStatusText[statusFilter].toLowerCase()}`}
-                </Text>
-              </View>
-            )}
+                    : `Không có đơn hàng ${OrderStatusText[statusFilter].toLowerCase()}`
+                }
+                image={<MaterialIcons name="inbox" size={64} color="#d9d9d9" />}
+              />
+            }
           />
         </View>
       </RestaurantScreenWrapper>

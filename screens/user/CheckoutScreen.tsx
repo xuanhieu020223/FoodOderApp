@@ -23,6 +23,7 @@ import * as Location from 'expo-location';
 import { UserStackParamList } from '../../navigation/UserNavigator';
 import CustomerScreenWrapper from '../../components/CustomerScreenWrapper';
 import FloatingChatButton from '../../components/FloatingChatButton';
+import MomoQRDisplay from '../../components/MomoQRDisplay';
 
 type NavigationProp = NativeStackNavigationProp<UserStackParamList>;
 type CheckoutRouteProp = RouteProp<UserStackParamList, 'Checkout'>;
@@ -46,7 +47,7 @@ type OrderDetails = {
   phone: string;
   address: string;
   note: string;
-  paymentMethod: 'COD' | 'Banking';
+  paymentMethod: 'COD' | 'Banking' | 'MoMo';
 };
 
 interface LocationData {
@@ -89,6 +90,8 @@ const CheckoutScreen = () => {
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [voucherModalVisible, setVoucherModalVisible] = useState(false);
   const [selectedVoucher, setSelectedVoucher] = useState<Voucher | null>(null);
+  const [momoQRVisible, setMomoQRVisible] = useState(false);
+  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -156,7 +159,6 @@ const CheckoutScreen = () => {
       }
     } catch (error) {
       console.error('Error loading user data:', error);
-      Alert.alert('Lỗi', 'Không thể tải thông tin người dùng');
     }
   };
 
@@ -179,7 +181,6 @@ const CheckoutScreen = () => {
       setLoading(false);
     } catch (error) {
       console.error('Error loading selected items:', error);
-      Alert.alert('Lỗi', 'Không thể tải thông tin đơn hàng');
       setLoading(false);
     }
   };
@@ -291,7 +292,7 @@ const CheckoutScreen = () => {
       orderDetails.phone.trim().length > 0 &&
       orderDetails.address.trim().length > 0 &&
       cartItems.length > 0 &&
-      (orderDetails.paymentMethod === 'COD' || orderDetails.paymentMethod === 'Banking')
+      (orderDetails.paymentMethod === 'COD' || orderDetails.paymentMethod === 'Banking' || orderDetails.paymentMethod === 'MoMo')
     );
 
     return valid;
@@ -304,6 +305,12 @@ const CheckoutScreen = () => {
 
     if (!isFormValid()) {
       Alert.alert('Thông báo', 'Vui lòng điền đầy đủ thông tin đặt hàng');
+      return;
+    }
+
+    // Nếu thanh toán bằng MoMo, hiển thị QR code trước
+    if (orderDetails.paymentMethod === 'MoMo') {
+      await handleMomoPayment();
       return;
     }
 
@@ -385,6 +392,22 @@ const CheckoutScreen = () => {
 
         const newOrder = await addDoc(ordersRef, orderPayload);
         createdOrderIds.push(newOrder.id);
+
+        // Tạo thông báo cho khách hàng về đơn hàng mới
+        try {
+          await addDoc(collection(db, 'notifications'), {
+            to: user.uid,
+            target: 'customer',
+            type: 'order',
+            title: 'Đặt đơn thành công',
+            content: `Đơn hàng #${newOrder.id.slice(0, 8)} tại ${orderPayload.restaurantName} đã được tạo. Vui lòng chờ nhà hàng xác nhận.`,
+            orderId: newOrder.id,
+            createdAt: new Date(),
+            read: false,
+          });
+        } catch (notiError) {
+          console.error('Error creating order notification:', notiError);
+        }
       }
 
       if (applicableVoucher) {
@@ -424,7 +447,6 @@ const CheckoutScreen = () => {
       );
     } catch (error) {
       console.error('Error placing order:', error);
-      Alert.alert('Lỗi', 'Không thể đặt hàng');
     } finally {
       setSubmitting(false);
     }
@@ -489,7 +511,6 @@ const CheckoutScreen = () => {
       }
     } catch (error) {
       console.error('Error getting location:', error);
-      Alert.alert('Lỗi', 'Không thể lấy vị trí hiện tại. Vui lòng thử lại sau.');
     }
   };
 
@@ -497,6 +518,188 @@ const CheckoutScreen = () => {
     if (location) {
       const url = `https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}`;
       Linking.openURL(url);
+    }
+  };
+
+  const handleMomoPayment = async () => {
+    try {
+      setSubmitting(true);
+      const user = auth.currentUser;
+      if (!user) {
+        navigation.navigate('Login');
+        return;
+      }
+
+      // Tạo order tạm thời với status 'pending_payment'
+      const groupedItems = cartItems.reduce<Record<string, CartItem[]>>((acc, item) => {
+        const key = item.restaurantId || 'marketplace';
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(item);
+        return acc;
+      }, {});
+
+      const subtotalAll = calculateSubTotal();
+      const applicableVoucher =
+        selectedVoucher && isVoucherEligible(selectedVoucher, subtotalAll) ? selectedVoucher : null;
+      const totalVoucherDiscount = applicableVoucher
+        ? calculateVoucherDiscount(applicableVoucher, subtotalAll)
+        : 0;
+
+      const ordersRef = collection(db, 'orders');
+      const tempOrderId = `TEMP_${Date.now()}`;
+      setPendingOrderId(tempOrderId);
+
+      // Hiển thị QR code MoMo
+      setMomoQRVisible(true);
+      setSubmitting(false);
+    } catch (error) {
+      console.error('Error initiating MoMo payment:', error);
+      setSubmitting(false);
+    }
+  };
+
+  const handleMomoPaymentSuccess = async () => {
+    try {
+      if (!pendingOrderId) return;
+
+      setSubmitting(true);
+      const user = auth.currentUser;
+      if (!user) {
+        navigation.navigate('Login');
+        return;
+      }
+
+      // Tạo order thực sự sau khi thanh toán thành công
+      const groupedItems = cartItems.reduce<Record<string, CartItem[]>>((acc, item) => {
+        const key = item.restaurantId || 'marketplace';
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(item);
+        return acc;
+      }, {});
+
+      const subtotalAll = calculateSubTotal();
+      const applicableVoucher =
+        selectedVoucher && isVoucherEligible(selectedVoucher, subtotalAll) ? selectedVoucher : null;
+      const totalVoucherDiscount = applicableVoucher
+        ? calculateVoucherDiscount(applicableVoucher, subtotalAll)
+        : 0;
+      let remainingVoucherDiscount = totalVoucherDiscount;
+      const groupedEntries = Object.entries(groupedItems);
+      const createdOrderIds: string[] = [];
+
+      const ordersRef = collection(db, 'orders');
+
+      for (let index = 0; index < groupedEntries.length; index++) {
+        const [restaurantId, items] = groupedEntries[index];
+        const restaurantSubtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+        let orderVoucherDiscount = 0;
+
+        if (applicableVoucher && totalVoucherDiscount > 0) {
+          if (index === groupedEntries.length - 1) {
+            orderVoucherDiscount = remainingVoucherDiscount;
+          } else {
+            const proportion = subtotalAll > 0 ? restaurantSubtotal / subtotalAll : 0;
+            orderVoucherDiscount = Math.min(
+              remainingVoucherDiscount,
+              Math.round(totalVoucherDiscount * proportion)
+            );
+          }
+        }
+
+        remainingVoucherDiscount = Math.max(0, remainingVoucherDiscount - orderVoucherDiscount);
+
+        const orderPayload = {
+          userId: user.uid,
+          restaurantId: restaurantId === 'marketplace' ? null : restaurantId,
+          restaurantName: items[0].restaurantName || 'Đối tác FoodOrder',
+          restaurantImage: items[0].restaurantImage || items[0].imageUrl,
+          items: items.map(item => ({
+            foodId: item.foodId,
+            name: item.name,
+            price: item.price,
+            quantity: item.quantity,
+            imageUrl: item.imageUrl,
+            restaurantId: item.restaurantId,
+          })),
+          customerName: orderDetails.fullName,
+          customerPhone: orderDetails.phone,
+          address: orderDetails.address,
+          subtotal: restaurantSubtotal,
+          deliveryFee: DELIVERY_FEE,
+          voucherDiscount: orderVoucherDiscount,
+          voucherCode: applicableVoucher?.code || null,
+          voucherId: applicableVoucher?.id || null,
+          voucherType: applicableVoucher?.discountType || null,
+          totalAmount: Math.max(0, restaurantSubtotal + DELIVERY_FEE - orderVoucherDiscount),
+          status: 'processing', // Đã thanh toán nên chuyển sang processing
+          note: orderDetails.note,
+          paymentMethod: 'MoMo',
+          paymentStatus: 'paid',
+          createdAt: new Date(),
+        };
+
+        const newOrder = await addDoc(ordersRef, orderPayload);
+        createdOrderIds.push(newOrder.id);
+
+        // Tạo thông báo cho khách hàng về đơn hàng thanh toán MoMo thành công
+        try {
+          await addDoc(collection(db, 'notifications'), {
+            to: user.uid,
+            target: 'customer',
+            type: 'order',
+            title: 'Đơn hàng đã được thanh toán',
+            content: `Đơn hàng #${newOrder.id.slice(0, 8)} đã thanh toán qua MoMo. Nhà hàng sẽ sớm xác nhận và chuẩn bị món cho bạn.`,
+            orderId: newOrder.id,
+            createdAt: new Date(),
+            read: false,
+          });
+        } catch (notiError) {
+          console.error('Error creating MoMo order notification:', notiError);
+        }
+      }
+
+      if (applicableVoucher) {
+        try {
+          await updateDoc(doc(db, 'vouchers', applicableVoucher.id), {
+            isUsed: true,
+            usedAt: new Date(),
+            lastOrderId: createdOrderIds[0] || null,
+          });
+        } catch (voucherError) {
+          console.error('Error updating voucher status:', voucherError);
+        }
+      }
+
+      // Delete ordered items from cart
+      const batch = writeBatch(db);
+      selectedItems.forEach(itemId => {
+        const cartItemRef = doc(db, 'carts', itemId);
+        batch.delete(cartItemRef);
+      });
+      await batch.commit();
+
+      if (applicableVoucher) {
+        await loadUserVouchers();
+        setSelectedVoucher(null);
+      }
+
+      setMomoQRVisible(false);
+      setPendingOrderId(null);
+
+      Alert.alert(
+        'Thanh toán thành công',
+        'Đơn hàng của bạn đã được đặt thành công',
+        [
+          {
+            text: 'Xem đơn hàng',
+            onPress: () => navigation.navigate('TabNavigator', { screen: 'Orders' }),
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Error completing MoMo payment:', error);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -711,6 +914,30 @@ const CheckoutScreen = () => {
               <Ionicons name="checkmark-circle" size={24} color="#ee4d2d" />
             )}
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.paymentOption,
+              orderDetails.paymentMethod === 'MoMo' && styles.paymentOptionSelected
+            ]}
+            onPress={() => handleInputChange('paymentMethod', 'MoMo')}
+          >
+            <View style={styles.paymentOptionContent}>
+              <View style={[styles.momoIconContainer, orderDetails.paymentMethod === 'MoMo' && styles.momoIconContainerActive]}>
+                <Text style={[styles.momoIcon, orderDetails.paymentMethod === 'MoMo' && styles.momoIconActive]}>MoMo</Text>
+              </View>
+              <View style={styles.paymentOptionTexts}>
+                <Text style={[
+                  styles.paymentOptionText,
+                  orderDetails.paymentMethod === 'MoMo' && styles.paymentOptionTextSelected
+                ]}>Ví MoMo</Text>
+                <Text style={styles.paymentOptionSubtext}>Thanh toán bằng quét mã QR MoMo</Text>
+              </View>
+            </View>
+            {orderDetails.paymentMethod === 'MoMo' && (
+              <Ionicons name="checkmark-circle" size={24} color="#ee4d2d" />
+            )}
+          </TouchableOpacity>
         </View>
 
         {/* Note Section */}
@@ -801,6 +1028,21 @@ const CheckoutScreen = () => {
       </View>
       <FloatingChatButton />
       </>
+
+      {momoQRVisible && pendingOrderId && (
+        <MomoQRDisplay
+          visible={momoQRVisible}
+          onClose={() => {
+            setMomoQRVisible(false);
+            setPendingOrderId(null);
+          }}
+          onPaymentSuccess={handleMomoPaymentSuccess}
+          amount={totalWithVoucher}
+          orderId={pendingOrderId}
+          orderInfo={`Thanh toan don hang ${pendingOrderId}`}
+          momoPhone={orderDetails.phone}
+        />
+      )}
     </CustomerScreenWrapper>
   );
 };
@@ -1095,6 +1337,25 @@ const styles = StyleSheet.create({
     padding: 10,
     backgroundColor: '#f0f0f0',
     borderRadius: 8,
+  },
+  momoIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#A50064',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  momoIconContainerActive: {
+    backgroundColor: '#A50064',
+  },
+  momoIcon: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  momoIconActive: {
+    color: '#fff',
   },
 });
 

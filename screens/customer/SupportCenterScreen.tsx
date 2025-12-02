@@ -22,6 +22,7 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import { db } from '../../config/Firebase';
+import { Card, Button, Tag, Badge, Empty } from '../../components/admin/AntDesignComponents';
 
 type TicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
 type TicketPriority = 'low' | 'medium' | 'high' | 'urgent';
@@ -45,6 +46,7 @@ type SupportTicket = {
     phone?: string;
     email?: string;
   };
+  slaHours?: number; // SLA in hours
 };
 
 const STATUS_META: Record<TicketStatus, { label: string; color: string; icon: keyof typeof MaterialIcons.glyphMap }> = {
@@ -136,6 +138,32 @@ const SupportCenterScreen = () => {
     );
   }, [tickets]);
 
+  // Tính toán SLA - tickets cần xử lý trong 2 giờ
+  const urgentTickets = useMemo(() => {
+    const now = new Date();
+    return tickets.filter((ticket) => {
+      if (ticket.status === 'resolved' || ticket.status === 'closed') return false;
+      if (!ticket.createdAt) return false;
+      
+      const createdAt = ticket.createdAt.toDate();
+      const hoursSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
+      return hoursSinceCreation < 2; // SLA < 2h
+    });
+  }, [tickets]);
+
+  const calculateSLA = (ticket: SupportTicket): { hours: number; isUrgent: boolean } => {
+    if (!ticket.createdAt) return { hours: 0, isUrgent: false };
+    
+    const now = new Date();
+    const createdAt = ticket.createdAt.toDate();
+    const hoursSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
+    
+    return {
+      hours: hoursSinceCreation,
+      isUrgent: hoursSinceCreation < 2 && ticket.status !== 'resolved' && ticket.status !== 'closed',
+    };
+  };
+
   const handleUpdateStatus = async (status: TicketStatus) => {
     if (!selectedTicket) return;
     setUpdating(true);
@@ -160,37 +188,57 @@ const SupportCenterScreen = () => {
   const renderTicketCard = ({ item }: { item: SupportTicket }) => {
     const statusMeta = STATUS_META[item.status];
     const priorityMeta = item.priority ? PRIORITY_META[item.priority] : undefined;
+    const sla = calculateSLA(item);
+    
     return (
-      <TouchableOpacity style={styles.ticketCard} onPress={() => openTicketModal(item)}>
-        <View style={styles.ticketHeader}>
-          <View style={styles.ticketHeaderText}>
-            <Text style={styles.ticketSubject}>{item.subject || 'Không có tiêu đề'}</Text>
-            <Text style={styles.ticketMeta}>
-              {item.category || 'Khác'} • {formatDate(item.updatedAt)}
-            </Text>
-          </View>
-          <View style={[styles.statusBadge, { backgroundColor: statusMeta.color }]}>
-            <MaterialIcons name={statusMeta.icon} size={16} color="#fff" />
-            <Text style={styles.statusText}>{statusMeta.label}</Text>
-          </View>
-        </View>
-
-        <Text style={styles.ticketMessage} numberOfLines={2}>
-          {item.message || 'Không có nội dung'}
-        </Text>
-
-        <View style={styles.ticketFooter}>
-          <View style={styles.footerItem}>
-            <MaterialIcons name="person" size={16} color="#888" />
-            <Text style={styles.footerText}>{item.contact?.name || item.userId || 'Ẩn danh'}</Text>
-          </View>
-          {priorityMeta && (
-            <View style={[styles.priorityBadge, { backgroundColor: priorityMeta.color }]}>
-              <Text style={styles.priorityText}>{priorityMeta.label}</Text>
+      <Card
+        style={styles.ticketCard}
+        bordered={true}
+        shadow={true}
+      >
+        <TouchableOpacity onPress={() => openTicketModal(item)}>
+          <View style={styles.ticketHeader}>
+            <View style={styles.ticketHeaderText}>
+              <View style={styles.ticketTitleRow}>
+                <Text style={styles.ticketSubject}>{item.subject || 'Không có tiêu đề'}</Text>
+                {sla.isUrgent && (
+                  <Badge dot color="#ff4d4f">
+                    <View />
+                  </Badge>
+                )}
+              </View>
+              <Text style={styles.ticketMeta}>
+                {item.category || 'Khác'} • {formatDate(item.updatedAt)}
+                {sla.hours > 0 && (
+                  <Text style={styles.slaText}>
+                    {' '}• SLA: {sla.hours.toFixed(1)}h
+                  </Text>
+                )}
+              </Text>
             </View>
-          )}
-        </View>
-      </TouchableOpacity>
+            <Tag color={statusMeta.color}>
+              <MaterialIcons name={statusMeta.icon} size={14} color={statusMeta.color} />
+              <Text style={[styles.statusText, { color: statusMeta.color, marginLeft: 4 }]}>
+                {statusMeta.label}
+              </Text>
+            </Tag>
+          </View>
+
+          <Text style={styles.ticketMessage} numberOfLines={2}>
+            {item.message || 'Không có nội dung'}
+          </Text>
+
+          <View style={styles.ticketFooter}>
+            <View style={styles.footerItem}>
+              <MaterialIcons name="person" size={16} color="#888" />
+              <Text style={styles.footerText}>{item.contact?.name || item.userId || 'Ẩn danh'}</Text>
+            </View>
+            {priorityMeta && (
+              <Tag color={priorityMeta.color}>{priorityMeta.label}</Tag>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Card>
     );
   };
 
@@ -204,19 +252,28 @@ const SupportCenterScreen = () => {
 
   return (
     <View style={styles.container}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.statsRow}
-        contentContainerStyle={styles.statsRowContent}
-      >
-        {(['open', 'in_progress', 'resolved', 'closed'] as const).map((status) => (
-          <View key={status} style={styles.statCard}>
-            <Text style={styles.statValue}>{statusStats[status] || 0}</Text>
-            <Text style={styles.statLabel}>{STATUS_META[status].label}</Text>
+      <Card title="Thống kê ticket" style={styles.statsCard}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.statsRowContent}
+        >
+          {(['open', 'in_progress', 'resolved', 'closed'] as const).map((status) => (
+            <View key={status} style={styles.statCard}>
+              <Text style={styles.statValue}>{statusStats[status] || 0}</Text>
+              <Text style={styles.statLabel}>{STATUS_META[status].label}</Text>
+            </View>
+          ))}
+        </ScrollView>
+        {urgentTickets.length > 0 && (
+          <View style={styles.urgentAlert}>
+            <MaterialIcons name="warning" size={20} color="#ff4d4f" />
+            <Text style={styles.urgentText}>
+              {urgentTickets.length} ticket cần xử lý gấp (SLA &lt; 2h)
+            </Text>
           </View>
-        ))}
-      </ScrollView>
+        )}
+      </Card>
 
       <View style={styles.toolbar}>
         <View style={styles.searchBox}>
@@ -266,11 +323,10 @@ const SupportCenterScreen = () => {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <MaterialIcons name="support-agent" size={48} color="#ccc" />
-            <Text style={styles.emptyTitle}>Không có khiếu nại</Text>
-            <Text style={styles.emptySubtitle}>Tất cả người dùng đang hài lòng 🎉</Text>
-          </View>
+          <Empty
+            description="Không có khiếu nại. Tất cả người dùng đang hài lòng 🎉"
+            image={<MaterialIcons name="support-agent" size={64} color="#d9d9d9" />}
+          />
         }
       />
 
@@ -324,26 +380,26 @@ const SupportCenterScreen = () => {
 
                 <View style={styles.actionRow}>
                   {(['open', 'in_progress', 'resolved', 'closed'] as const).map((status) => (
-                    <TouchableOpacity
+                    <Button
                       key={status}
-                      style={[
-                        styles.statusAction,
-                        selectedTicket.status === status && styles.statusActionActive,
-                      ]}
+                      type={selectedTicket.status === status ? 'primary' : 'default'}
                       onPress={() => handleUpdateStatus(status)}
                       disabled={updating}
+                      style={styles.statusActionButton}
                     >
-                      <Text
-                        style={[
-                          styles.statusActionText,
-                          selectedTicket.status === status && styles.statusActionTextActive,
-                        ]}
-                      >
-                        {STATUS_META[status].label}
-                      </Text>
-                    </TouchableOpacity>
+                      {STATUS_META[status].label}
+                    </Button>
                   ))}
                 </View>
+                
+                {selectedTicket && calculateSLA(selectedTicket).isUrgent && (
+                  <View style={styles.slaWarning}>
+                    <MaterialIcons name="warning" size={20} color="#ff4d4f" />
+                    <Text style={styles.slaWarningText}>
+                      Ticket này cần được xử lý trong vòng 2 giờ (SLA)
+                    </Text>
+                  </View>
+                )}
               </ScrollView>
             )}
           </View>
@@ -619,6 +675,55 @@ const styles = StyleSheet.create({
   },
   statusActionTextActive: {
     color: '#fff',
+  },
+  statsCard: {
+    marginBottom: 16,
+  },
+  urgentAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff1f0',
+    padding: 12,
+    borderRadius: 6,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#ffccc7',
+  },
+  urgentText: {
+    marginLeft: 8,
+    color: '#ff4d4f',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  ticketTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  slaText: {
+    fontSize: 12,
+    color: '#fa8c16',
+    fontWeight: '600',
+  },
+  slaWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff1f0',
+    padding: 12,
+    borderRadius: 6,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: '#ffccc7',
+  },
+  slaWarningText: {
+    marginLeft: 8,
+    color: '#ff4d4f',
+    fontSize: 14,
+    flex: 1,
+  },
+  statusActionButton: {
+    flex: 1,
+    marginHorizontal: 4,
   },
 });
 

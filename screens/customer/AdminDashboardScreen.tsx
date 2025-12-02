@@ -17,9 +17,20 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AdminStackParamList, RestaurantTabParamList } from '../../navigation/AdminNavigator';
 import { auth, db } from '../../config/Firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { 
+  doc, 
+  getDoc, 
+  collection, 
+  query, 
+  getDocs, 
+  where, 
+  Timestamp,
+  orderBy,
+  limit 
+} from 'firebase/firestore';
 import ChangePasswordModal from '../../components/ChangePasswordModal';
 import RestaurantScreenWrapper from '../../components/RestaurantScreenWrapper';
+import { Card, Statistic, Button, Tag, Badge } from '../../components/admin/AntDesignComponents';
 
 type AdminNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<RestaurantTabParamList>,
@@ -54,31 +65,43 @@ const AdminDashboardScreen = () => {
   const [userRole, setUserRole] = useState<string>('restaurant');
   const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
 
+  const [stats, setStats] = useState({
+    newOrders: 0,
+    todayRevenue: 0,
+    newCustomers: 0,
+    outOfStock: 0,
+    totalUsers: 0,
+    totalRestaurants: 0,
+    totalOrders: 0,
+    totalRevenue: 0,
+  });
+  const [loadingStats, setLoadingStats] = useState(true);
+
   const statCards = [
     {
       title: 'Đơn hàng mới',
-      value: '25',
+      value: stats.newOrders.toString(),
       icon: 'receipt-long' as const,
       color: '#FFE8D9',
       iconColor: '#F97316',
     },
     {
       title: 'Doanh thu hôm nay',
-      value: '12.5M',
+      value: `${(stats.todayRevenue / 1000000).toFixed(1)}M`,
       icon: 'attach-money' as const,
       color: '#DCFCE7',
       iconColor: '#22C55E',
     },
     {
       title: 'Khách hàng mới',
-      value: '08',
+      value: stats.newCustomers.toString(),
       icon: 'groups' as const,
       color: '#E0F2FE',
       iconColor: '#0EA5E9',
     },
     {
       title: 'Sản phẩm hết hàng',
-      value: '03',
+      value: stats.outOfStock.toString(),
       icon: 'error-outline' as const,
       color: '#FEE2E2',
       iconColor: '#EF4444',
@@ -123,6 +146,13 @@ const AdminDashboardScreen = () => {
             color: '#0EA5E9',
             onPress: () => navigation.navigate('ManageUsers'),
           } as MenuItemProps,
+          {
+            title: 'Quản lý nhà hàng',
+            icon: 'store',
+            description: 'Xem và quản lý tất cả nhà hàng',
+            color: '#FF6B35',
+            onPress: () => navigation.navigate('ManageRestaurants'),
+          } as MenuItemProps,
         ]
       : []),
     {
@@ -143,7 +173,84 @@ const AdminDashboardScreen = () => {
 
   useEffect(() => {
     loadRestaurantInfo();
+    loadDashboardStats();
   }, []);
+
+  const loadDashboardStats = async () => {
+    try {
+      setLoadingStats(true);
+      const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const startOfWeek = new Date(now);
+      startOfWeek.setDate(now.getDate() - 7);
+
+      // Đếm đơn hàng mới hôm nay
+      const ordersRef = collection(db, 'orders');
+      const newOrdersQuery = query(
+        ordersRef,
+        where('createdAt', '>=', Timestamp.fromDate(startOfDay)),
+        where('status', 'in', ['pending', 'confirmed', 'processing'])
+      );
+      const newOrdersSnapshot = await getDocs(newOrdersQuery);
+      const newOrdersCount = newOrdersSnapshot.size;
+
+      // Tính doanh thu hôm nay
+      const todayRevenueQuery = query(
+        ordersRef,
+        where('createdAt', '>=', Timestamp.fromDate(startOfDay)),
+        where('status', '==', 'delivered')
+      );
+      const todayRevenueSnapshot = await getDocs(todayRevenueQuery);
+      const todayRevenue = todayRevenueSnapshot.docs.reduce((sum, doc) => {
+        return sum + (doc.data().totalAmount || 0);
+      }, 0);
+
+      // Đếm khách hàng mới (7 ngày qua)
+      const usersRef = collection(db, 'users');
+      const newCustomersQuery = query(
+        usersRef,
+        where('createdAt', '>=', Timestamp.fromDate(startOfWeek)),
+        where('role', '==', 'customer')
+      );
+      const newCustomersSnapshot = await getDocs(newCustomersQuery);
+      const newCustomersCount = newCustomersSnapshot.size;
+
+      // Đếm sản phẩm hết hàng
+      const foodsRef = collection(db, 'foods');
+      const outOfStockQuery = query(foodsRef, where('stock', '==', 0));
+      const outOfStockSnapshot = await getDocs(outOfStockQuery);
+      const outOfStockCount = outOfStockSnapshot.size;
+
+      // Tổng số người dùng
+      const allUsersSnapshot = await getDocs(usersRef);
+      const totalUsers = allUsersSnapshot.size;
+      const totalRestaurants = allUsersSnapshot.docs.filter(
+        doc => doc.data().role === 'restaurant'
+      ).length;
+
+      // Tổng đơn hàng và doanh thu
+      const allOrdersSnapshot = await getDocs(ordersRef);
+      const totalOrders = allOrdersSnapshot.size;
+      const totalRevenue = allOrdersSnapshot.docs
+        .filter(doc => doc.data().status === 'delivered')
+        .reduce((sum, doc) => sum + (doc.data().totalAmount || 0), 0);
+
+      setStats({
+        newOrders: newOrdersCount,
+        todayRevenue,
+        newCustomers: newCustomersCount,
+        outOfStock: outOfStockCount,
+        totalUsers,
+        totalRestaurants,
+        totalOrders,
+        totalRevenue,
+      });
+    } catch (error) {
+      console.error('Error loading dashboard stats:', error);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
 
   const loadRestaurantInfo = async () => {
     try {
@@ -233,40 +340,98 @@ const AdminDashboardScreen = () => {
         rightContent={headerRight}
         headerExtras={headerExtras}
       >
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>Tổng quan hôm nay</Text>
+        <Card
+          title="Tổng quan hôm nay"
+          extra={
           <TouchableOpacity onPress={() => navigation.navigate('Statistics')}>
-            <Text style={styles.linkText}>Xem chi tiết</Text>
+              <Text style={styles.linkText}>Xem chi tiết →</Text>
           </TouchableOpacity>
+          }
+          style={styles.dashboardCard}
+        >
+          {loadingStats ? (
+            <View style={styles.statsLoadingContainer}>
+              <ActivityIndicator size="small" color="#1890ff" />
         </View>
-
+          ) : (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.statsScroll}
         >
           {statCards.map((card) => (
-            <View key={card.title} style={[styles.statCard, { backgroundColor: card.color }]}>
+                <Card
+                  key={card.title}
+                  style={[styles.statCard, { backgroundColor: card.color }]}
+                  bordered={false}
+                  shadow={true}
+                >
               <View style={[styles.statIconContainer, { backgroundColor: card.iconColor }]}>
-                <MaterialIcons name={card.icon} size={20} color="#fff" />
-              </View>
-              <Text style={styles.statValue}>{card.value}</Text>
-              <Text style={styles.statLabel}>{card.title}</Text>
-            </View>
-          ))}
-        </ScrollView>
+                    <MaterialIcons name={card.icon} size={24} color="#fff" />
+                  </View>
+                  <Statistic
+                    title={card.title}
+                    value={card.value}
+                    valueStyle={styles.statValue}
+                    titleStyle={styles.statLabel}
+                  />
+                </Card>
+              ))}
+            </ScrollView>
+          )}
+        </Card>
 
-        <Text style={[styles.sectionTitle, { marginTop: 12 }]}>Quản lý nhà hàng</Text>
+        {userRole === 'admin' && (
+          <Card title="Tổng quan hệ thống" style={styles.dashboardCard}>
+            <View style={styles.systemStatsContainer}>
+              <View style={styles.systemStatCard}>
+                <MaterialIcons name="people" size={28} color="#1890ff" />
+                <Statistic
+                  title="Tổng người dùng"
+                  value={stats.totalUsers}
+                  valueStyle={styles.systemStatValue}
+                />
+              </View>
+              <View style={styles.systemStatCard}>
+                <MaterialIcons name="restaurant" size={28} color="#fa8c16" />
+                <Statistic
+                  title="Nhà hàng"
+                  value={stats.totalRestaurants}
+                  valueStyle={styles.systemStatValue}
+                />
+              </View>
+              <View style={styles.systemStatCard}>
+                <MaterialIcons name="receipt-long" size={28} color="#52c41a" />
+                <Statistic
+                  title="Tổng đơn hàng"
+                  value={stats.totalOrders}
+                  valueStyle={styles.systemStatValue}
+                />
+              </View>
+              <View style={styles.systemStatCard}>
+                <MaterialIcons name="attach-money" size={28} color="#722ed1" />
+                <Statistic
+                  title="Tổng doanh thu"
+                  value={`${(stats.totalRevenue / 1000000).toFixed(1)}M`}
+                  valueStyle={styles.systemStatValue}
+                />
+              </View>
+            </View>
+          </Card>
+        )}
+
+        <Card title="Quản lý nhà hàng" style={styles.dashboardCard}>
         {managementMenu.map((item) => (
           <MenuItem key={item.title} {...item} />
         ))}
+        </Card>
 
-        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Cài đặt</Text>
+        <Card title="Cài đặt" style={styles.dashboardCard}>
         <TouchableOpacity
           style={styles.menuItem}
           onPress={() => setChangePasswordModalVisible(true)}
         >
-          <View style={[styles.menuIconContainer, { backgroundColor: '#E91E63' }]}>
+            <View style={[styles.menuIconContainer, { backgroundColor: '#eb2f96' }]}>
             <MaterialIcons name="lock" size={28} color="#fff" />
           </View>
           <View style={styles.menuContent}>
@@ -275,6 +440,7 @@ const AdminDashboardScreen = () => {
           </View>
           <MaterialIcons name="chevron-right" size={24} color="#999" />
         </TouchableOpacity>
+        </Card>
       </RestaurantScreenWrapper>
 
       <ChangePasswordModal
@@ -427,6 +593,43 @@ const styles = StyleSheet.create({
   menuDescription: {
     fontSize: 13,
     color: '#666',
+  },
+  statsLoadingContainer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  systemStatsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 20,
+    gap: 12,
+  },
+  systemStatCard: {
+    width: '48%',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  systemStatValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#111827',
+    marginTop: 8,
+  },
+  systemStatLabel: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  dashboardCard: {
+    marginBottom: 16,
   },
 });
 

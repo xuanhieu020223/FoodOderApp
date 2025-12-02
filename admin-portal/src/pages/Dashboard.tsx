@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import StatCard from '../components/StatCard';
 import StatusBadge from '../components/StatusBadge';
@@ -7,6 +8,7 @@ import type { OrderDoc } from '../services/orderService';
 import { fetchLatestOrders } from '../services/orderService';
 import type { PromotionDoc } from '../services/promotionService';
 import { fetchPromotions } from '../services/promotionService';
+import { fetchUsersWithOrderMeta } from '../services/userService';
 
 type TimestampLike = OrderDoc['createdAt'];
 
@@ -21,6 +23,8 @@ const toDate = (value?: TimestampLike | null) => {
 };
 
 const Dashboard = () => {
+  const navigate = useNavigate();
+
   const {
     data: orders = [],
     isLoading: ordersLoading,
@@ -41,7 +45,16 @@ const Dashboard = () => {
     staleTime: 1000 * 60,
   });
 
-  const loading = ordersLoading || promotionsLoading;
+  const {
+    data: users = [],
+    isLoading: usersLoading,
+  } = useQuery({
+    queryKey: ['users', 'dashboard'],
+    queryFn: fetchUsersWithOrderMeta,
+    staleTime: 1000 * 60,
+  });
+
+  const loading = ordersLoading || promotionsLoading || usersLoading;
   const hasError = Boolean(ordersError || promotionsError);
   const errorMessage = hasError ? 'Không thể tải dữ liệu tổng quan.' : null;
 
@@ -55,8 +68,19 @@ const Dashboard = () => {
     const totalRevenueToday = ordersToday.reduce((sum, order) => sum + (order.totalAmount ?? 0), 0);
     const delivered = orders.filter((order) => order.status === 'delivered').length;
     const pending = orders.filter((order) => order.status !== 'delivered').length;
+    
+    const totalUsers = users.length;
+    const restaurants = users.filter((u) => u.role === 'restaurant').length;
+    const customers = users.filter((u) => u.role === 'customer').length;
+    const drivers = users.filter((u) => u.role === 'driver').length;
 
     return [
+      {
+        label: 'Tổng người dùng',
+        value: totalUsers.toLocaleString('vi-VN'),
+        trend: customers,
+        subLabel: `${customers} khách hàng, ${restaurants} nhà hàng, ${drivers} tài xế`,
+      },
       {
         label: 'Doanh thu hôm nay',
         value: totalRevenueToday.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }),
@@ -82,7 +106,7 @@ const Dashboard = () => {
         subLabel: `${promotions.length} campaign đã tạo`,
       },
     ];
-  }, [orders, promotions]);
+  }, [orders, promotions, users]);
 
   const orderVolumeSeries = useMemo(() => {
     const days = Array.from({ length: 7 }).map((_, idx) => {
@@ -136,11 +160,13 @@ const Dashboard = () => {
         </div>
         <div className="page__actions">
           <button className="btn btn--ghost">Tải báo cáo</button>
-          <button className="btn btn--primary">Tạo chiến dịch</button>
+          <button className="btn btn--primary" onClick={() => navigate('/promotions/create')}>
+            Tạo chiến dịch
+          </button>
         </div>
       </div>
 
-      <div className="grid grid--stats">
+      <div className="grid grid--stats" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
         {stats.map((stat) => (
           <StatCard key={stat.label} {...stat} />
         ))}

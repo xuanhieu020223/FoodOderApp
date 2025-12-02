@@ -14,7 +14,7 @@ import {
   SafeAreaView,
   ScrollView,
 } from 'react-native';
-import { Ionicons, Feather, AntDesign, MaterialIcons } from '@expo/vector-icons';
+import { Ionicons, Feather, AntDesign } from '@expo/vector-icons';
 import Animated, { FadeInUp, FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, CommonActions } from '@react-navigation/native';
@@ -45,6 +45,55 @@ const GOOGLE_CLIENT_IDS = {
   webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? 'disabled-web-client-id',
 };
 
+type RoleTheme = {
+  accent: string;
+  backgroundGradient: [string, string];
+  heroTitle: string;
+  heroSubtitle: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  statusBarColor: string;
+  buttonGradient: [string, string];
+};
+
+const ROLE_THEMES: Record<LoginMode, RoleTheme> = {
+  customer: {
+    accent: '#ff6b4a',
+    backgroundGradient: ['#fff5f1', '#ffe6dc'],
+    heroTitle: 'Xin chào 👋',
+    heroSubtitle: 'Khám phá món ngon và đặt hàng chỉ trong vài chạm.',
+    icon: 'fast-food-outline',
+    statusBarColor: '#ffe6dc',
+    buttonGradient: ['#ff7a45', '#ff4b2b'],
+  },
+  restaurant: {
+    accent: '#f8481b',
+    backgroundGradient: ['#fff1ed', '#ffd9cd'],
+    heroTitle: 'Đối tác Nhà hàng',
+    heroSubtitle: 'Theo dõi và xử lý đơn hàng mọi lúc mọi nơi.',
+    icon: 'restaurant',
+    statusBarColor: '#ffd9cd',
+    buttonGradient: ['#ff5f3d', '#ff2d2d'],
+  },
+  shipper: {
+    accent: '#1c86ff',
+    backgroundGradient: ['#f1f7ff', '#dbe9ff'],
+    heroTitle: 'Xin chào Shipper 🚚',
+    heroSubtitle: 'Nhận đơn nhanh chóng và giao hàng đúng giờ.',
+    icon: 'bicycle-outline',
+    statusBarColor: '#dbe9ff',
+    buttonGradient: ['#3a8dff', '#1c6bff'],
+  },
+  admin: {
+    accent: '#6366f1',
+    backgroundGradient: ['#f3f4ff', '#e0e7ff'],
+    heroTitle: 'Xin chào Quản trị viên',
+    heroSubtitle: 'Quản lý hệ thống FoodOrder một cách toàn diện.',
+    icon: 'shield-outline',
+    statusBarColor: '#e0e7ff',
+    buttonGradient: ['#818cf8', '#4f46e5'],
+  },
+};
+
 const LogIn = () => {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<LoginRouteProp>();
@@ -56,6 +105,12 @@ const LogIn = () => {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [googleRequest, , promptGoogleLogin] = Google.useAuthRequest(GOOGLE_CLIENT_IDS);
   const isGoogleConfigured = GOOGLE_LOGIN_ENABLED && Object.values(GOOGLE_CLIENT_IDS).some((value) => !!value);
+  const currentTheme = ROLE_THEMES[mode] ?? ROLE_THEMES.customer;
+  const roleToggleOptions: Array<{ label: string; value: LoginMode; icon: keyof typeof Ionicons.glyphMap }> = [
+    { label: 'Khách hàng', value: 'customer', icon: 'person-outline' },
+    { label: 'Nhà hàng', value: 'restaurant', icon: 'restaurant' },
+    { label: 'Shipper', value: 'shipper', icon: 'bicycle-outline' },
+  ];
 
   useEffect(() => {
     if (route.params?.mode) {
@@ -154,11 +209,17 @@ const LogIn = () => {
 
       navigateByRole(userRole);
     } catch (error: any) {
-      console.error('Login error:', error);
+      // Xử lý lỗi đăng nhập với thông báo thân thiện
       if (error.code === 'auth/invalid-credential') {
         Alert.alert('Đăng nhập thất bại', 'Email hoặc mật khẩu không đúng.');
       } else if (error.code === 'auth/user-not-found') {
         Alert.alert('Đăng nhập thất bại', 'Tài khoản không tồn tại.');
+      } else if (error.code === 'auth/wrong-password') {
+        Alert.alert('Đăng nhập thất bại', 'Mật khẩu không đúng.');
+      } else if (error.code === 'auth/invalid-email') {
+        Alert.alert('Đăng nhập thất bại', 'Email không hợp lệ.');
+      } else if (error.code === 'auth/too-many-requests') {
+        Alert.alert('Đăng nhập thất bại', 'Quá nhiều lần thử đăng nhập. Vui lòng thử lại sau.');
       } else {
         Alert.alert('Đăng nhập thất bại', 'Đã có lỗi xảy ra. Vui lòng thử lại sau.');
       }
@@ -239,600 +300,393 @@ const LogIn = () => {
       }
 
       await signInWithGoogleToken(result.authentication.idToken);
-    } catch (error) {
-      console.error('Google login error:', error);
-      Alert.alert('Lỗi', 'Không thể đăng nhập bằng Google. Vui lòng thử lại sau.');
+    } catch (error: any) {
+      // Xử lý lỗi đăng nhập Google với thông báo thân thiện
+      if (error.code === 'auth/account-exists-with-different-credential') {
+        Alert.alert('Lỗi', 'Tài khoản này đã được đăng ký bằng phương thức khác.');
+      } else if (error.code === 'auth/invalid-credential') {
+        Alert.alert('Lỗi', 'Không thể xác thực tài khoản Google.');
+      } else {
+        Alert.alert('Lỗi', 'Không thể đăng nhập bằng Google. Vui lòng thử lại sau.');
+      }
     } finally {
       setIsGoogleLoading(false);
     }
   };
 
-  const isRestaurantMode = mode === 'restaurant';
-
   return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <StatusBar barStyle={isRestaurantMode ? "light-content" : "dark-content"} backgroundColor={isRestaurantMode ? "#ee4d2d" : "#fff"} />
-      {isRestaurantMode ? (
-        <LinearGradient
-          colors={['#ee4d2d', '#ff6b4a', '#ff8c6b']}
-          style={styles.gradientContainer}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+    <LinearGradient colors={currentTheme.backgroundGradient} style={styles.gradientBackground}>
+      <SafeAreaView style={styles.safeArea}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.flex}
         >
-          <SafeAreaView style={styles.safeArea}>
-            <ScrollView 
-              contentContainerStyle={styles.scrollContent}
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              <Animated.View 
-                style={styles.restaurantContent} 
-                entering={FadeInDown.duration(600).delay(100)}
-              >
-                {/* Logo Section */}
-                <Animated.View 
-                  style={styles.restaurantLogoContainer}
-                  entering={FadeInUp.duration(600).delay(200)}
-                >
-                  <View style={styles.restaurantIconContainer}>
-                    <MaterialIcons name="restaurant" size={48} color="#fff" />
-                  </View>
-                  <Text style={styles.restaurantWelcomeText}>Chào mừng trở lại!</Text>
-                  <Text style={styles.restaurantSubText}>Đăng nhập để quản lý nhà hàng của bạn</Text>
-                </Animated.View>
+          <StatusBar barStyle="dark-content" backgroundColor={currentTheme.statusBarColor} />
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <Animated.View style={styles.heroCard} entering={FadeInDown.duration(600)}>
+              <View style={[styles.heroIconWrapper, { backgroundColor: `${currentTheme.accent}1A` }]}>
+                <Ionicons name={currentTheme.icon} size={28} color={currentTheme.accent} />
+              </View>
+              <Text style={styles.heroTitle}>{currentTheme.heroTitle}</Text>
+              <Text style={styles.heroSubtitle}>{currentTheme.heroSubtitle}</Text>
+              <View style={styles.heroBadge}>
+                <Ionicons name="shield-checkmark-outline" size={16} color={currentTheme.accent} />
+                <Text style={[styles.heroBadgeText, { color: currentTheme.accent }]}>Bảo mật & an toàn</Text>
+              </View>
+            </Animated.View>
 
-                {/* Form Card */}
-                <Animated.View 
-                  style={styles.restaurantCard}
-                  entering={FadeInUp.duration(600).delay(300)}
-                >
-                  <View style={styles.restaurantFormContainer}>
-                    {/* Email Input */}
-                    <Animated.View 
-                      style={styles.restaurantInputContainer}
-                      entering={FadeInUp.duration(400).delay(400)}
+            <Animated.View style={styles.formCard} entering={FadeInUp.duration(600)}>
+              <View style={styles.logoRow}>
+                <Image
+                  source={require('../assets/images/logo.png')}
+                  style={styles.logo}
+                  resizeMode="contain"
+                />
+                <View>
+                  <Text style={styles.cardTitle}>FoodOrder</Text>
+                  <Text style={styles.cardSubtitle}>Đăng nhập để tiếp tục trải nghiệm</Text>
+                </View>
+              </View>
+
+              <View style={styles.modeSwitcher}>
+                {roleToggleOptions.map((option) => {
+                  const isActive = mode === option.value;
+                  return (
+                    <TouchableOpacity
+                      key={option.value}
+                      style={[
+                        styles.modeButton,
+                        isActive && [
+                          styles.modeButtonActive,
+                          { borderColor: currentTheme.accent, backgroundColor: `${currentTheme.accent}12` },
+                        ],
+                      ]}
+                      onPress={() => setMode(option.value)}
                     >
-                      <View style={styles.restaurantInputWrapper}>
-                        <Ionicons name="mail-outline" size={22} color="#ee4d2d" style={styles.inputIcon} />
-                        <TextInput
-                          placeholder="Email nhà hàng"
-                          placeholderTextColor="#999"
-                          style={styles.restaurantTextInput}
-                          value={email}
-                          onChangeText={setEmail}
-                          autoCapitalize="none"
-                          keyboardType="email-address"
-                        />
-                      </View>
-                    </Animated.View>
-
-                    {/* Password Input */}
-                    <Animated.View 
-                      style={styles.restaurantInputContainer}
-                      entering={FadeInUp.duration(400).delay(500)}
-                    >
-                      <View style={styles.restaurantInputWrapper}>
-                        <Ionicons name="lock-closed-outline" size={22} color="#ee4d2d" style={styles.inputIcon} />
-                        <TextInput
-                          placeholder="Mật khẩu"
-                          placeholderTextColor="#999"
-                          style={styles.restaurantTextInput}
-                          secureTextEntry={secureText}
-                          value={password}
-                          onChangeText={setPassword}
-                        />
-                        <TouchableOpacity 
-                          onPress={() => setSecureText(!secureText)} 
-                          style={styles.restaurantEyeIcon}
-                        >
-                          <Feather 
-                            name={secureText ? 'eye-off' : 'eye'} 
-                            size={20} 
-                            color="#666" 
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    </Animated.View>
-
-                    {/* Forgot Password */}
-                    <TouchableOpacity 
-                      style={styles.restaurantForgot}
-                      onPress={() => navigation.navigate('ResetPassword')}
-                    >
-                      <Text style={styles.restaurantForgotText}>Quên mật khẩu?</Text>
-                    </TouchableOpacity>
-
-                    {/* Login Button */}
-                    <Animated.View entering={FadeInUp.duration(400).delay(600)}>
-                      <TouchableOpacity 
-                        style={styles.restaurantLoginButton} 
-                        onPress={handleLogin}
-                        activeOpacity={0.9}
+                      <Ionicons
+                        name={option.icon}
+                        size={18}
+                        color={isActive ? currentTheme.accent : '#7b8499'}
+                      />
+                      <Text
+                        style={[
+                          styles.modeButtonLabel,
+                          isActive && { color: currentTheme.accent },
+                        ]}
                       >
-                        <LinearGradient
-                          colors={['#ee4d2d', '#ff6b4a']}
-                          style={styles.restaurantLoginGradient}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 0 }}
-                        >
-                          <Text style={styles.restaurantLoginButtonText}>Đăng nhập</Text>
-                          <MaterialIcons name="arrow-forward" size={20} color="#fff" />
-                        </LinearGradient>
-                      </TouchableOpacity>
-                    </Animated.View>
+                        {option.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
 
-                    {/* Mode Switcher */}
-                    <View style={styles.restaurantModeSwitcher}>
-                      <Text style={styles.restaurantModeText}>Bạn là?</Text>
-                      <View style={styles.restaurantModeButtons}>
-                        {[
-                          { label: 'Khách hàng', value: 'customer', icon: 'person-outline' },
-                          { label: 'Nhà hàng', value: 'restaurant', icon: 'restaurant' },
-                          { label: 'Shipper', value: 'shipper', icon: 'local-shipping' },
-                        ].map((option) => (
-                          <TouchableOpacity
-                            key={option.value}
-                            style={[
-                              styles.restaurantModeButton,
-                              mode === option.value && styles.restaurantModeButtonActive,
-                            ]}
-                            onPress={() => setMode(option.value as LoginMode)}
-                          >
-                            <Ionicons 
-                              name={option.icon as any} 
-                              size={18} 
-                              color={mode === option.value ? '#ee4d2d' : '#666'} 
-                            />
-                            <Text
-                              style={[
-                                styles.restaurantModeButtonText,
-                                mode === option.value && styles.restaurantModeButtonTextActive,
-                              ]}
-                            >
-                              {option.label}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    </View>
-                  </View>
-                </Animated.View>
-              </Animated.View>
-            </ScrollView>
-          </SafeAreaView>
-        </LinearGradient>
-      ) : (
-        <Animated.View style={styles.content} entering={FadeInUp.duration(600)}>
-          <View style={styles.logoContainer}>
-            <Image 
-              source={require('../assets/images/logo.png')} 
-              style={styles.logo}
-              resizeMode="contain"
-            />
-          </View>
-          
-          <Text style={styles.titleText}>
-            {mode === 'shipper'
-              ? 'Đăng nhập Shipper'
-              : 'Đăng Nhập'}
-          </Text>
-          <View style={styles.modeSwitcher}>
-            {[
-              { label: 'Khách hàng', value: 'customer' },
-              { label: 'Nhà hàng', value: 'restaurant' },
-              { label: 'Shipper', value: 'shipper' },
-            ].map((option) => (
+              <View style={styles.inputWrapper}>
+                <Ionicons name="mail-outline" size={20} color={currentTheme.accent} />
+                <TextInput
+                  placeholder="Email"
+                  placeholderTextColor="#9ca3af"
+                  style={styles.textInput}
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+              </View>
+
+              <View style={styles.inputWrapper}>
+                <Ionicons name="lock-closed-outline" size={20} color={currentTheme.accent} />
+                <TextInput
+                  placeholder="Mật khẩu"
+                  placeholderTextColor="#9ca3af"
+                  style={styles.textInput}
+                  secureTextEntry={secureText}
+                  value={password}
+                  onChangeText={setPassword}
+                />
+                <TouchableOpacity onPress={() => setSecureText(!secureText)} style={styles.eyeIcon}>
+                  <Feather name={secureText ? 'eye-off' : 'eye'} size={18} color="#7b8499" />
+                </TouchableOpacity>
+              </View>
+
               <TouchableOpacity
-                key={option.value}
-                style={[
-                  styles.modeButton,
-                  mode === option.value && styles.modeButtonActive,
-                ]}
-                onPress={() => setMode(option.value as LoginMode)}
+                style={styles.forgot}
+                onPress={() => navigation.navigate('ResetPassword')}
               >
-                <Text
+                <Text style={styles.forgotText}>Quên mật khẩu?</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.loginButtonOuter} onPress={handleLogin} activeOpacity={0.9}>
+                <LinearGradient
+                  colors={currentTheme.buttonGradient}
+                  start={{ x: 0, y: 0.5 }}
+                  end={{ x: 1, y: 0.5 }}
+                  style={styles.loginButtonGradient}
+                >
+                  <Text style={styles.loginButtonText}>Đăng nhập</Text>
+                  <Ionicons name="arrow-forward" size={18} color="#fff" />
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>Hoặc</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              {GOOGLE_LOGIN_ENABLED && (
+                <TouchableOpacity
                   style={[
-                    styles.modeButtonText,
-                    mode === option.value && styles.modeButtonTextActive,
+                    styles.googleButton,
+                    (!isGoogleConfigured || isGoogleLoading) && styles.googleButtonDisabled,
                   ]}
+                  onPress={handleGoogleLogin}
+                  disabled={!isGoogleConfigured || isGoogleLoading}
                 >
-                  {option.label}
+                  {isGoogleLoading ? (
+                    <ActivityIndicator color="#EA4335" style={styles.googleIcon} />
+                  ) : (
+                    <AntDesign name="google" size={20} color="#EA4335" style={styles.googleIcon} />
+                  )}
+                  <Text style={styles.googleText}>
+                    {isGoogleConfigured ? 'Đăng nhập bằng Google' : 'Chưa cấu hình Google'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              <View style={styles.registerRow}>
+                <Text style={styles.registerText}>
+                  Chưa có tài khoản?{' '}
+                  <Text
+                    style={[styles.registerLink, { color: currentTheme.accent }]}
+                    onPress={() => navigation.navigate('Register')}
+                  >
+                    Đăng ký ngay
+                  </Text>
                 </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <View style={styles.formContainer}>
-            <View style={styles.inputContainer}>
-              <TextInput
-                placeholder="Email"
-                style={styles.textInput}
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-              />
-            </View>
-
-            <View style={styles.inputContainer}>
-              <TextInput
-                placeholder="Mật khẩu"
-                style={styles.textInput}
-                secureTextEntry={secureText}
-                value={password}
-                onChangeText={setPassword}
-              />
-              <TouchableOpacity onPress={() => setSecureText(!secureText)} style={styles.eyeIcon}>
-                <Feather name={secureText ? 'eye-off' : 'eye'} size={20} color="#666" />
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity 
-              style={styles.forgot}
-              onPress={() => navigation.navigate('ResetPassword')}
-            >
-              <Text style={styles.forgotText}>Quên mật khẩu?</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-              <Text style={styles.loginButtonText}>Đăng nhập</Text>
-            </TouchableOpacity>
-
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>Hoặc</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            {GOOGLE_LOGIN_ENABLED && (
-              <TouchableOpacity
-                style={[styles.googleButton, (!isGoogleConfigured || isGoogleLoading) && styles.googleButtonDisabled]}
-                onPress={handleGoogleLogin}
-                disabled={!isGoogleConfigured || isGoogleLoading}
-              >
-                {isGoogleLoading ? (
-                  <ActivityIndicator color="#EA4335" style={styles.googleIcon} />
-                ) : (
-                  <AntDesign name="google" size={20} color="#EA4335" style={styles.googleIcon} />
-                )}
-                <Text style={styles.googleText}>
-                  {isGoogleConfigured ? 'Đăng nhập bằng Google' : 'Chưa cấu hình Google'}
-                </Text>
-              </TouchableOpacity>
-            )}
-
-            <View style={styles.registerContainer}>
-              <Text style={styles.registerText}>
-                Chưa có tài khoản?{' '}
-                <Text
-                  style={styles.registerLink}
-                  onPress={() => navigation.navigate('Register')}
-                >
-                  Đăng ký
-                </Text>
-              </Text>
-            </View>
-          </View>
-        </Animated.View>
-      )}
-    </KeyboardAvoidingView>
+              </View>
+            </Animated.View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  content: {
-    flex: 1,
-    padding: 24,
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginTop: 40,
-    marginBottom: 40,
-  },
-  logo: {
-    width: 120,
-    height: 120,
-  },
-  formContainer: {
-    flex: 1,
-  },
-  titleText: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 32,
-    textAlign: 'center',
-  },
-  modeSwitcher: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    backgroundColor: '#f3f4f6',
-    borderRadius: 999,
-    padding: 4,
-    marginBottom: 24,
-  },
-  modeButton: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 999,
-    alignItems: 'center',
-  },
-  modeButtonActive: {
-    backgroundColor: '#fff',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-  },
-  modeButtonText: {
-    fontSize: 14,
-    color: '#6b7280',
-    fontWeight: '600',
-  },
-  modeButtonTextActive: {
-    color: '#ee4d2d',
-  },
-  
-  welcomeText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  subText: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 32,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginBottom: 16,
-    backgroundColor: '#f8f8f8',
-  },
-  textInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#333',
-  },
-  eyeIcon: {
-    padding: 4,
-  },
-  forgot: {
-    alignSelf: 'flex-end',
-    marginBottom: 24,
-  },
-  forgotText: {
-    color: '#ee4d2d',
-    fontSize: 14,
-  },
-  loginButton: {
-    backgroundColor: '#ee4d2d',
-    paddingVertical: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  loginButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#ddd',
-  },
-  dividerText: {
-    marginHorizontal: 16,
-    color: '#666',
-    fontSize: 14,
-  },
-  googleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderColor: '#ddd',
-    borderWidth: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    justifyContent: 'center',
-    backgroundColor: '#fff',
-  },
-  googleIcon: {
-    marginRight: 8,
-  },
-  googleText: {
-    fontSize: 16,
-    color: '#333',
-  },
-  googleButtonDisabled: {
-    opacity: 0.6,
-  },
-  registerContainer: {
-    marginTop: 24,
-    alignItems: 'center',
-  },
-  registerText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  registerLink: {
-    color: '#ee4d2d',
-    fontWeight: '600',
-  },
-  // Restaurant/Admin Login Styles
-  gradientContainer: {
+  gradientBackground: {
     flex: 1,
   },
   safeArea: {
     flex: 1,
   },
+  flex: {
+    flex: 1,
+  },
   scrollContent: {
     flexGrow: 1,
-    paddingBottom: 40,
-  },
-  restaurantContent: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 20,
-  },
-  restaurantLogoContainer: {
-    alignItems: 'center',
-    marginTop: 40,
-    marginBottom: 32,
-  },
-  restaurantIconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  restaurantWelcomeText: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  restaurantSubText: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.9)',
-    textAlign: 'center',
-    paddingHorizontal: 20,
-  },
-  restaurantCard: {
-    backgroundColor: '#fff',
-    borderRadius: 24,
     padding: 24,
-    marginTop: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  restaurantFormContainer: {
     gap: 20,
   },
-  restaurantInputContainer: {
-    marginBottom: 4,
+  heroCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    borderRadius: 28,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.65)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    gap: 10,
   },
-  restaurantInputWrapper: {
+  heroIconWrapper: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroTitle: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  heroSubtitle: {
+    fontSize: 16,
+    color: '#4b5563',
+    lineHeight: 22,
+  },
+  heroBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5F7FA',
-    borderRadius: 16,
+    gap: 6,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    backgroundColor: '#fff',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  heroBadgeText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  formCard: {
+    backgroundColor: '#fff',
+    borderRadius: 32,
+    padding: 24,
+    gap: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+  },
+  logoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  logo: {
+    width: 56,
+    height: 56,
+  },
+  cardTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  cardSubtitle: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginTop: 2,
+  },
+  modeSwitcher: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  modeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
+  },
+  modeButtonActive: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+  },
+  modeButtonLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f9fafb',
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderWidth: 1.5,
-    borderColor: '#E0E0E0',
+    height: 56,
+    gap: 10,
   },
-  inputIcon: {
-    marginRight: 12,
-  },
-  restaurantTextInput: {
+  textInput: {
     flex: 1,
     fontSize: 16,
-    color: '#333',
-    padding: 0,
+    color: '#111827',
   },
-  restaurantEyeIcon: {
-    padding: 4,
-    marginLeft: 8,
+  eyeIcon: {
+    padding: 6,
   },
-  restaurantForgot: {
+  forgot: {
     alignSelf: 'flex-end',
-    marginTop: -8,
-    marginBottom: 8,
   },
-  restaurantForgotText: {
-    color: '#ee4d2d',
-    fontSize: 14,
-    fontWeight: '500',
+  forgotText: {
+    color: '#6b7280',
+    fontWeight: '600',
   },
-  restaurantLoginButton: {
-    borderRadius: 16,
+  loginButtonOuter: {
+    borderRadius: 20,
     overflow: 'hidden',
-    marginTop: 8,
-    marginBottom: 24,
-    shadowColor: '#ee4d2d',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.2,
+    shadowRadius: 18,
   },
-  restaurantLoginGradient: {
+  loginButtonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 16,
     gap: 8,
   },
-  restaurantLoginButtonText: {
+  loginButtonText: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 17,
+    fontWeight: '700',
   },
-  restaurantModeSwitcher: {
-    marginTop: 8,
-  },
-  restaurantModeText: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 12,
-    fontWeight: '500',
-  },
-  restaurantModeButtons: {
+  divider: {
     flexDirection: 'row',
-    gap: 8,
+    alignItems: 'center',
+    gap: 12,
   },
-  restaurantModeButton: {
+  dividerLine: {
     flex: 1,
+    height: 1,
+    backgroundColor: '#e5e7eb',
+  },
+  dividerText: {
+    fontSize: 13,
+    color: '#9ca3af',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: '#F5F7FA',
-    borderWidth: 1.5,
-    borderColor: '#E0E0E0',
-    gap: 6,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 16,
+    paddingVertical: 14,
+    backgroundColor: '#fff',
+    gap: 8,
   },
-  restaurantModeButtonActive: {
-    backgroundColor: '#FFF3F0',
-    borderColor: '#ee4d2d',
+  googleIcon: {
+    marginRight: 4,
   },
-  restaurantModeButtonText: {
-    fontSize: 13,
-    color: '#666',
+  googleText: {
+    fontSize: 15,
+    color: '#1f2937',
     fontWeight: '600',
   },
-  restaurantModeButtonTextActive: {
-    color: '#ee4d2d',
+  googleButtonDisabled: {
+    opacity: 0.5,
+  },
+  registerRow: {
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  registerText: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+  },
+  registerLink: {
+    fontWeight: '700',
   },
 });
 

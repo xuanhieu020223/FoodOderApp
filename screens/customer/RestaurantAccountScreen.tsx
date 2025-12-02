@@ -8,6 +8,7 @@ import {
   Alert,
   ActivityIndicator,
   ScrollView,
+  Modal,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, CommonActions } from '@react-navigation/native';
@@ -39,13 +40,63 @@ const RestaurantAccountScreen = () => {
     openingHours: '',
     description: '',
   });
+  const [restaurantStatus, setRestaurantStatus] = useState({
+    isActive: true,
+    isOpen: true,
+    isOnHoliday: false,
+    isAcceptingOrders: true,
+    autoOpenTime: { start: '08:00', end: '22:00' },
+    autoOpenEnabled: false,
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
+  const [statusModalVisible, setStatusModalVisible] = useState(false);
+  const [showOwnerInfo, setShowOwnerInfo] = useState(false);
+  const [showRestaurantInfo, setShowRestaurantInfo] = useState(false);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  // Auto open/close based on time
+  useEffect(() => {
+    if (!restaurantStatus.autoOpenEnabled || restaurantStatus.isOnHoliday || !restaurantStatus.isActive) {
+      return;
+    }
+
+    const checkAutoOpen = async () => {
+      const now = new Date();
+      const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const { start, end } = restaurantStatus.autoOpenTime;
+
+      const shouldBeOpen = currentTime >= start && currentTime < end;
+
+      if (shouldBeOpen !== restaurantStatus.isOpen) {
+        try {
+          const user = auth.currentUser;
+          if (!user) return;
+
+          await updateDoc(doc(db, 'restaurants', user.uid), {
+            isOpen: shouldBeOpen,
+            updatedAt: new Date(),
+          });
+          
+          setRestaurantStatus(prev => ({ ...prev, isOpen: shouldBeOpen }));
+        } catch (error) {
+          console.error('Error auto updating status:', error);
+        }
+      }
+    };
+
+    // Check immediately
+    checkAutoOpen();
+
+    // Check every minute
+    const interval = setInterval(checkAutoOpen, 60000);
+
+    return () => clearInterval(interval);
+  }, [restaurantStatus.autoOpenEnabled, restaurantStatus.autoOpenTime.start, restaurantStatus.autoOpenTime.end, restaurantStatus.isOnHoliday, restaurantStatus.isActive]);
 
   const loadData = async () => {
     try {
@@ -72,12 +123,61 @@ const RestaurantAccountScreen = () => {
           openingHours: data.openingHours || '',
           description: data.description || '',
         });
+        setRestaurantStatus({
+          isActive: data.isActive !== false,
+          isOpen: data.isOpen !== false,
+          isOnHoliday: data.isOnHoliday === true,
+          isAcceptingOrders: data.isAcceptingOrders !== false,
+          autoOpenTime: data.autoOpenTime || { start: '08:00', end: '22:00' },
+          autoOpenEnabled: data.autoOpenEnabled === true,
+        });
       }
     } catch (error) {
       console.error('Error loading account info:', error);
       Alert.alert('Lỗi', 'Không thể tải thông tin tài khoản');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUpdateStatus = async (updates: Partial<typeof restaurantStatus>) => {
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+
+      const newStatus = { ...restaurantStatus, ...updates };
+      await updateDoc(doc(db, 'restaurants', user.uid), {
+        ...newStatus,
+        updatedAt: new Date(),
+      });
+      setRestaurantStatus(newStatus);
+      
+      // Cập nhật status trong users collection
+      await updateDoc(doc(db, 'users', user.uid), {
+        status: newStatus.isActive ? 'active' : 'inactive',
+      });
+    } catch (error) {
+      console.error('Error updating status:', error);
+      Alert.alert('Lỗi', 'Không thể cập nhật trạng thái');
+    }
+  };
+
+  const handleSaveAutoOpenTime = async () => {
+    try {
+      const user = auth.currentUser;
+      if (!user) return;
+
+      await updateDoc(doc(db, 'restaurants', user.uid), {
+        autoOpenTime: restaurantStatus.autoOpenTime,
+        autoOpenEnabled: restaurantStatus.autoOpenEnabled,
+        updatedAt: new Date(),
+      });
+      
+      Alert.alert('Thành công', 'Đã lưu cài đặt tự động mở/đóng cửa');
+      setStatusModalVisible(false);
+    } catch (error) {
+      console.error('Error saving auto open time:', error);
+      Alert.alert('Lỗi', 'Không thể lưu cài đặt');
     }
   };
 
@@ -99,11 +199,13 @@ const RestaurantAccountScreen = () => {
           address: restaurantInfo.address,
           openingHours: restaurantInfo.openingHours,
           description: restaurantInfo.description,
+          ...restaurantStatus,
           updatedAt: new Date(),
         }),
         updateDoc(doc(db, 'users', user.uid), {
           name: userInfo.name,
           phone: userInfo.phone,
+          status: restaurantStatus.isActive ? 'active' : 'inactive',
         }),
       ]);
 
@@ -115,21 +217,6 @@ const RestaurantAccountScreen = () => {
       setSaving(false);
     }
   };
-
-  const quickActions = [
-    {
-      title: 'Quản lý danh mục',
-      description: 'Tùy chỉnh nhóm món ăn',
-      icon: 'category',
-      onPress: () => navigation.navigate('ManageCategories'),
-    },
-    {
-      title: 'Nhân sự & phân quyền',
-      description: 'Quản lý tài khoản nhân viên',
-      icon: 'group',
-      onPress: () => navigation.navigate('ManageUsers'),
-    },
-  ];
 
   if (loading) {
     return (
@@ -156,93 +243,236 @@ const RestaurantAccountScreen = () => {
       >
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Thông tin chủ sở hữu</Text>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoTitle}>Họ tên</Text>
-              <Text style={styles.infoValue}>{userInfo.name || 'Chưa cập nhật'}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoTitle}>Email đăng nhập</Text>
-              <Text style={styles.infoValue}>{userInfo.email}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoTitle}>Số điện thoại</Text>
-              <TextInput
-                style={styles.infoInput}
-                value={userInfo.phone}
-                onChangeText={(text) => setUserInfo((prev) => ({ ...prev, phone: text }))}
-                placeholder="Nhập số điện thoại"
-                keyboardType="phone-pad"
-              />
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Thông tin nhà hàng</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Tên nhà hàng"
-              value={restaurantInfo.name}
-              onChangeText={(text) => setRestaurantInfo((prev) => ({ ...prev, name: text }))}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Số điện thoại liên hệ"
-              value={restaurantInfo.phone}
-              onChangeText={(text) => setRestaurantInfo((prev) => ({ ...prev, phone: text }))}
-              keyboardType="phone-pad"
-            />
-            <TextInput
-              style={[styles.input, styles.multilineInput]}
-              placeholder="Địa chỉ chi tiết"
-              value={restaurantInfo.address}
-              onChangeText={(text) => setRestaurantInfo((prev) => ({ ...prev, address: text }))}
-              multiline
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Giờ mở cửa (VD: 08:00 - 22:00)"
-              value={restaurantInfo.openingHours}
-              onChangeText={(text) => setRestaurantInfo((prev) => ({ ...prev, openingHours: text }))}
-            />
-            <TextInput
-              style={[styles.input, styles.multilineInput]}
-              placeholder="Giới thiệu ngắn gọn"
-              value={restaurantInfo.description}
-              onChangeText={(text) => setRestaurantInfo((prev) => ({ ...prev, description: text }))}
-              multiline
-            />
             <TouchableOpacity
-              style={[styles.primaryButton, saving && styles.primaryButtonDisabled]}
-              onPress={handleSave}
-              disabled={saving}
+              style={[
+                styles.sectionHeaderRow,
+                showOwnerInfo && styles.sectionHeaderExpanded,
+              ]}
+              onPress={() => setShowOwnerInfo((prev) => !prev)}
+              activeOpacity={0.8}
             >
-              {saving ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <Text style={styles.primaryButtonText}>Lưu thay đổi</Text>
-              )}
+              <Text style={styles.sectionLabel}>Thông tin chủ sở hữu</Text>
+              <MaterialIcons
+                name={showOwnerInfo ? 'expand-less' : 'expand-more'}
+                size={24}
+                color="#6b7280"
+              />
             </TouchableOpacity>
+            {showOwnerInfo && (
+              <>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoTitle}>Họ tên</Text>
+                  <Text style={styles.infoValue}>{userInfo.name || 'Chưa cập nhật'}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoTitle}>Email đăng nhập</Text>
+                  <Text style={styles.infoValue}>{userInfo.email}</Text>
+                </View>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoTitle}>Số điện thoại</Text>
+                  <TextInput
+                    style={styles.infoInput}
+                    value={userInfo.phone}
+                    onChangeText={(text) => setUserInfo((prev) => ({ ...prev, phone: text }))}
+                    placeholder="Nhập số điện thoại"
+                    keyboardType="phone-pad"
+                  />
+                </View>
+              </>
+            )}
           </View>
 
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Hành động nhanh</Text>
-            {quickActions.map((action) => (
-              <TouchableOpacity
-                key={action.title}
-                style={styles.quickAction}
-                onPress={action.onPress}
-              >
-                <View style={[styles.quickActionIcon, { backgroundColor: '#fff3f0' }]}>
-                  <MaterialIcons name={action.icon as any} size={20} color="#ee4d2d" />
+            <TouchableOpacity
+              style={[
+                styles.sectionHeaderRow,
+                showRestaurantInfo && styles.sectionHeaderExpanded,
+              ]}
+              onPress={() => setShowRestaurantInfo((prev) => !prev)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.sectionLabel}>Thông tin nhà hàng</Text>
+              <MaterialIcons
+                name={showRestaurantInfo ? 'expand-less' : 'expand-more'}
+                size={24}
+                color="#6b7280"
+              />
+            </TouchableOpacity>
+            {showRestaurantInfo && (
+              <>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Tên nhà hàng"
+                  value={restaurantInfo.name}
+                  onChangeText={(text) => setRestaurantInfo((prev) => ({ ...prev, name: text }))}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Số điện thoại liên hệ"
+                  value={restaurantInfo.phone}
+                  onChangeText={(text) => setRestaurantInfo((prev) => ({ ...prev, phone: text }))}
+                  keyboardType="phone-pad"
+                />
+                <TextInput
+                  style={[styles.input, styles.multilineInput]}
+                  placeholder="Địa chỉ chi tiết"
+                  value={restaurantInfo.address}
+                  onChangeText={(text) => setRestaurantInfo((prev) => ({ ...prev, address: text }))}
+                  multiline
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Giờ mở cửa (VD: 08:00 - 22:00)"
+                  value={restaurantInfo.openingHours}
+                  onChangeText={(text) => setRestaurantInfo((prev) => ({ ...prev, openingHours: text }))}
+                />
+                <TextInput
+                  style={[styles.input, styles.multilineInput]}
+                  placeholder="Giới thiệu ngắn gọn"
+                  value={restaurantInfo.description}
+                  onChangeText={(text) => setRestaurantInfo((prev) => ({ ...prev, description: text }))}
+                  multiline
+                />
+                <TouchableOpacity
+                  style={[styles.primaryButton, saving && styles.primaryButtonDisabled]}
+                  onPress={handleSave}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={styles.primaryButtonText}>Lưu thay đổi</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Trạng thái hoạt động</Text>
+            
+            {/* Status Overview */}
+            <View style={styles.statusCard}>
+              <View style={styles.statusRow}>
+                <View style={styles.statusLeft}>
+                  <View style={[styles.statusIndicator, restaurantStatus.isActive && styles.statusIndicatorActive]} />
+                  <Text style={styles.statusLabel}>
+                    {restaurantStatus.isActive ? 'Đang hoạt động' : 'Tạm đóng cửa'}
+                  </Text>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.quickActionTitle}>{action.title}</Text>
-                  <Text style={styles.quickActionDescription}>{action.description}</Text>
+                <TouchableOpacity
+                  style={[styles.statusToggle, restaurantStatus.isActive && styles.statusToggleActive]}
+                  onPress={() => {
+                    const newStatus = !restaurantStatus.isActive;
+                    setRestaurantStatus(prev => ({ ...prev, isActive: newStatus, isOpen: newStatus }));
+                    handleUpdateStatus({ isActive: newStatus, isOpen: newStatus });
+                  }}
+                >
+                  <Text style={[styles.statusToggleText, restaurantStatus.isActive && styles.statusToggleTextActive]}>
+                    {restaurantStatus.isActive ? 'Tắt' : 'Bật'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.statusRow}>
+                <View style={styles.statusLeft}>
+                  <MaterialIcons 
+                    name={restaurantStatus.isOpen ? 'restaurant' : 'restaurant-menu'} 
+                    size={20} 
+                    color={restaurantStatus.isOpen ? '#4CAF50' : '#999'} 
+                  />
+                  <View style={styles.statusLabelContainer}>
+                    <Text style={styles.statusLabel}>
+                      {restaurantStatus.isOpen ? 'Đang mở cửa' : 'Đã đóng cửa'}
+                    </Text>
+                    {restaurantStatus.autoOpenEnabled && (
+                      <Text style={styles.statusSubLabel}>
+                        Tự động: {restaurantStatus.autoOpenTime.start} - {restaurantStatus.autoOpenTime.end}
+                      </Text>
+                    )}
+                  </View>
                 </View>
-                <MaterialIcons name="chevron-right" size={22} color="#bbb" />
-              </TouchableOpacity>
-            ))}
+                <TouchableOpacity
+                  style={[styles.statusToggle, restaurantStatus.isOpen && styles.statusToggleActive]}
+                  onPress={() => {
+                    const newStatus = !restaurantStatus.isOpen;
+                    setRestaurantStatus(prev => ({ ...prev, isOpen: newStatus }));
+                    handleUpdateStatus({ isOpen: newStatus });
+                  }}
+                  disabled={restaurantStatus.isOnHoliday}
+                >
+                  <Text style={[styles.statusToggleText, restaurantStatus.isOpen && styles.statusToggleTextActive]}>
+                    {restaurantStatus.isOpen ? 'Đóng' : 'Mở'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.statusRow}>
+                <View style={styles.statusLeft}>
+                  <MaterialIcons 
+                    name={restaurantStatus.isOnHoliday ? 'event-busy' : 'event-available'} 
+                    size={20} 
+                    color={restaurantStatus.isOnHoliday ? '#F44336' : '#4CAF50'} 
+                  />
+                  <Text style={styles.statusLabel}>
+                    {restaurantStatus.isOnHoliday ? 'Nghỉ lễ' : 'Đang hoạt động bình thường'}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.statusToggle, restaurantStatus.isOnHoliday && styles.statusToggleHoliday]}
+                  onPress={() => {
+                    const newStatus = !restaurantStatus.isOnHoliday;
+                    setRestaurantStatus(prev => ({ 
+                      ...prev, 
+                      isOnHoliday: newStatus,
+                      isOpen: newStatus ? false : prev.isOpen,
+                    }));
+                    handleUpdateStatus({ 
+                      isOnHoliday: newStatus,
+                      isOpen: newStatus ? false : restaurantStatus.isOpen,
+                    });
+                  }}
+                >
+                  <Text style={[styles.statusToggleText, restaurantStatus.isOnHoliday && styles.statusToggleTextActive]}>
+                    {restaurantStatus.isOnHoliday ? 'Hết nghỉ' : 'Nghỉ lễ'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.statusRow}>
+                <View style={styles.statusLeft}>
+                  <MaterialIcons 
+                    name={restaurantStatus.isAcceptingOrders ? 'shopping-cart' : 'remove-shopping-cart'} 
+                    size={20} 
+                    color={restaurantStatus.isAcceptingOrders ? '#4CAF50' : '#FF9800'} 
+                  />
+                  <Text style={styles.statusLabel}>
+                    {restaurantStatus.isAcceptingOrders ? 'Đang nhận đơn' : 'Tạm ngưng nhận đơn (quá tải)'}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.statusToggle, restaurantStatus.isAcceptingOrders && styles.statusToggleActive]}
+                  onPress={() => {
+                    const newStatus = !restaurantStatus.isAcceptingOrders;
+                    setRestaurantStatus(prev => ({ ...prev, isAcceptingOrders: newStatus }));
+                    handleUpdateStatus({ isAcceptingOrders: newStatus });
+                  }}
+                  disabled={restaurantStatus.isOnHoliday || !restaurantStatus.isOpen}
+                >
+                  <Text style={[styles.statusToggleText, restaurantStatus.isAcceptingOrders && styles.statusToggleTextActive]}>
+                    {restaurantStatus.isAcceptingOrders ? 'Tạm ngưng' : 'Nhận đơn'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => setStatusModalVisible(true)}
+            >
+              <MaterialIcons name="schedule" size={20} color="#ee4d2d" />
+              <Text style={styles.secondaryButtonText}>Thiết lập thời gian mở cửa tự động</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.section}>
@@ -282,6 +512,92 @@ const RestaurantAccountScreen = () => {
         visible={changePasswordModalVisible}
         onClose={() => setChangePasswordModalVisible(false)}
       />
+
+      {/* Auto Open Time Modal */}
+      <Modal
+        visible={statusModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setStatusModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Thời gian mở cửa tự động</Text>
+              <TouchableOpacity onPress={() => setStatusModalVisible(false)}>
+                <MaterialIcons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+              <View style={styles.modalSwitchRow}>
+                <View style={styles.modalSwitchLeft}>
+                  <MaterialIcons name="schedule" size={20} color="#ee4d2d" />
+                  <Text style={styles.modalSwitchLabel}>Bật tự động đóng/mở cửa</Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.modalSwitch, restaurantStatus.autoOpenEnabled && styles.modalSwitchActive]}
+                  onPress={() => {
+                    setRestaurantStatus(prev => ({ ...prev, autoOpenEnabled: !prev.autoOpenEnabled }));
+                  }}
+                >
+                  <View style={[styles.modalSwitchThumb, restaurantStatus.autoOpenEnabled && styles.modalSwitchThumbActive]} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.modalLabel}>Thời gian mở cửa:</Text>
+              <TextInput
+                style={styles.input}
+                value={restaurantStatus.autoOpenTime.start}
+                onChangeText={(text) => setRestaurantStatus(prev => ({
+                  ...prev,
+                  autoOpenTime: { ...prev.autoOpenTime, start: text }
+                }))}
+                placeholder="08:00"
+                placeholderTextColor="#999"
+                editable={restaurantStatus.autoOpenEnabled}
+              />
+
+              <Text style={styles.modalLabel}>Thời gian đóng cửa:</Text>
+              <TextInput
+                style={[styles.input, !restaurantStatus.autoOpenEnabled && styles.inputDisabled]}
+                value={restaurantStatus.autoOpenTime.end}
+                onChangeText={(text) => setRestaurantStatus(prev => ({
+                  ...prev,
+                  autoOpenTime: { ...prev.autoOpenTime, end: text }
+                }))}
+                placeholder="22:00"
+                placeholderTextColor="#999"
+                editable={restaurantStatus.autoOpenEnabled}
+              />
+
+              <View style={styles.modalNote}>
+                <MaterialIcons name="info" size={18} color="#2196F3" />
+                <Text style={styles.modalNoteText}>
+                  {restaurantStatus.autoOpenEnabled 
+                    ? 'Hệ thống sẽ tự động mở/đóng cửa theo thời gian đã thiết lập. Kiểm tra mỗi phút.'
+                    : 'Bật tính năng này để hệ thống tự động mở/đóng cửa theo giờ làm việc'}
+                </Text>
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setStatusModalVisible(false)}
+              >
+                <Text style={styles.cancelButtonText}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.saveButton]}
+                onPress={handleSaveAutoOpenTime}
+              >
+                <Text style={styles.saveButtonText}>Lưu</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 };
@@ -374,29 +690,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 16,
   },
-  quickAction: {
+  sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
+    justifyContent: 'space-between',
   },
-  quickActionIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  quickActionTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  quickActionDescription: {
-    fontSize: 13,
-    color: '#6b7280',
+  sectionHeaderExpanded: {
+    marginBottom: 16,
   },
   secondaryButton: {
     flexDirection: 'row',
@@ -427,6 +727,192 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     fontSize: 15,
+  },
+  statusCard: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  statusLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  statusIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#999',
+  },
+  statusIndicatorActive: {
+    backgroundColor: '#4CAF50',
+  },
+  statusLabel: {
+    fontSize: 15,
+    color: '#111827',
+    fontWeight: '500',
+  },
+  statusToggle: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    backgroundColor: '#F5F5F5',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  statusToggleActive: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
+  },
+  statusToggleText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#666',
+  },
+  statusToggleTextActive: {
+    color: '#fff',
+  },
+  statusToggleHoliday: {
+    backgroundColor: '#F44336',
+    borderColor: '#F44336',
+  },
+  statusLabelContainer: {
+    flex: 1,
+  },
+  statusSubLabel: {
+    fontSize: 11,
+    color: '#9ca3af',
+    marginTop: 2,
+  },
+  modalSwitchRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  modalSwitchLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  modalSwitchLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  modalSwitch: {
+    width: 50,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#E0E0E0',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  modalSwitchActive: {
+    backgroundColor: '#4CAF50',
+  },
+  modalSwitchThumb: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    alignSelf: 'flex-start',
+  },
+  modalSwitchThumbActive: {
+    alignSelf: 'flex-end',
+  },
+  inputDisabled: {
+    backgroundColor: '#F5F5F5',
+    color: '#999',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1A1A1A',
+  },
+  modalBody: {
+    padding: 20,
+  },
+  modalLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+    fontWeight: '600',
+  },
+  modalNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#E3F2FD',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 16,
+    gap: 8,
+  },
+  modalNoteText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#1976D2',
+    lineHeight: 18,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#F5F5F5',
+  },
+  cancelButtonText: {
+    color: '#666',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  saveButton: {
+    backgroundColor: '#ee4d2d',
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
 });
 

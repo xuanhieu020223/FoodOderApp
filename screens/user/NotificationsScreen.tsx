@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -6,194 +6,318 @@ import {
   SafeAreaView,
   FlatList,
   TouchableOpacity,
-  Image,
-  Alert,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import {
+  collection,
+  doc,
+  getDocs,
+  onSnapshot,
+  query,
+  updateDoc,
+  where,
+} from 'firebase/firestore';
+import { auth, db } from '../../config/Firebase';
 
-type NotificationType = 'promotion' | 'order' | 'system';
+type NotificationCategory = 'all' | 'promotion' | 'order' | 'system' | 'voucher';
 
-type Notification = {
+type FirestoreNotification = {
   id: string;
-  type: NotificationType;
-  title: string;
-  message: string;
-  image?: string;
-  time: string;
-  isRead: boolean;
+  type?: string;
+  title?: string;
+  content?: string;
+  message?: string;
+  to?: string;
+  target?: string;
+  createdAt?: any;
+  read?: boolean;
+  orderId?: string;
 };
 
-const notifications: Notification[] = [
-  {
-    id: '1',
-    type: 'promotion',
-    title: 'Giảm 50% cho đơn từ 50K',
-    message: 'Nhập mã WELCOME50 để được giảm 50% cho đơn hàng đầu tiên từ 50K',
-    image: 'https://images.foody.vn/res/g119/1184695/prof/s640x400/foody-upload-api-foody-mobile-im-f5d0d927-230403114431.jpeg',
-    time: '5 phút trước',
-    isRead: false,
-  },
-  {
-    id: '2',
-    type: 'order',
-    title: 'Đơn hàng đã giao thành công',
-    message: 'Đơn hàng #123456 từ Cơm Tấm Phúc Lộc Thọ đã được giao thành công',
-    time: '30 phút trước',
-    isRead: false,
-  },
-  {
-    id: '3',
-    type: 'system',
-    title: 'Cập nhật ứng dụng',
-    message: 'Phiên bản mới đã sẵn sàng. Cập nhật ngay để trải nghiệm những tính năng mới nhất!',
-    time: '1 giờ trước',
-    isRead: true,
-  },
-];
-
 const NotificationsScreen = () => {
-  const [activeTab, setActiveTab] = useState<NotificationType | 'all'>('all');
-  const [notificationsList, setNotificationsList] = useState<Notification[]>(notifications);
+  const [notifications, setNotifications] = useState<FirestoreNotification[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<NotificationCategory>('all');
 
-  const tabs = [
+  const user = auth.currentUser;
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setLoading(false);
+      return;
+    }
+
+    const notiRef = collection(db, 'notifications');
+    const q = query(
+      notiRef,
+      where('to', 'in', [user.uid, 'all-customers', 'all-users'])
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const data: FirestoreNotification[] = [];
+        snapshot.forEach((docSnap) => {
+          data.push({ id: docSnap.id, ...(docSnap.data() as any) });
+        });
+
+        data.sort((a, b) => {
+          const getTime = (ts: any) => {
+            if (!ts) return 0;
+            if (typeof ts.toDate === 'function') return ts.toDate().getTime();
+            if (typeof ts === 'string') return new Date(ts).getTime();
+            if (ts.seconds) return ts.seconds * 1000;
+            return 0;
+          };
+
+          return getTime(b.createdAt) - getTime(a.createdAt);
+        });
+
+        setNotifications(data);
+        setLoading(false);
+        setRefreshing(false);
+      },
+      (error) => {
+        console.error('Error listening to notifications:', error);
+        setLoading(false);
+        setRefreshing(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user?.uid]);
+
+  const onRefresh = async () => {
+    if (!user?.uid) return;
+    setRefreshing(true);
+    try {
+      const notiRef = collection(db, 'notifications');
+      const q = query(
+        notiRef,
+        where('to', 'in', [user.uid, 'all-customers', 'all-users'])
+      );
+      const snapshot = await getDocs(q);
+      const data: FirestoreNotification[] = [];
+      snapshot.forEach((docSnap) => {
+        data.push({ id: docSnap.id, ...(docSnap.data() as any) });
+      });
+
+      data.sort((a, b) => {
+        const getTime = (ts: any) => {
+          if (!ts) return 0;
+          if (typeof ts.toDate === 'function') return ts.toDate().getTime();
+          if (typeof ts === 'string') return new Date(ts).getTime();
+          if (ts.seconds) return ts.seconds * 1000;
+          return 0;
+        };
+
+        return getTime(b.createdAt) - getTime(a.createdAt);
+      });
+
+      setNotifications(data);
+    } catch (e) {
+      console.error('Error fetching notifications:', e);
+    }
+    setRefreshing(false);
+  };
+
+  const markAsRead = async (notificationId: string) => {
+    try {
+      await updateDoc(doc(db, 'notifications', notificationId), {
+        read: true,
+        readAt: new Date(),
+      });
+    } catch (e) {
+      console.error('Error marking notification as read:', e);
+    }
+  };
+
+  const markAllAsRead = async () => {
+    try {
+      const unread = notifications.filter((n) => !n.read);
+      if (unread.length === 0) {
+        return;
+      }
+
+      await Promise.all(
+        unread.map((n) =>
+          updateDoc(doc(db, 'notifications', n.id), {
+            read: true,
+            readAt: new Date(),
+          })
+        )
+      );
+    } catch (e) {
+      console.error('Error marking all notifications as read:', e);
+    }
+  };
+
+  const formatDate = (timestamp: any) => {
+    if (!timestamp) return '';
+    try {
+      const date =
+        typeof timestamp.toDate === 'function'
+          ? timestamp.toDate()
+          : typeof timestamp === 'string'
+          ? new Date(timestamp)
+          : timestamp.seconds
+          ? new Date(timestamp.seconds * 1000)
+          : new Date();
+
+      const now = new Date();
+      const diff = now.getTime() - date.getTime();
+      const minutes = Math.floor(diff / 60000);
+      const hours = Math.floor(diff / 3600000);
+      const days = Math.floor(diff / 86400000);
+
+      if (minutes < 1) return 'Vừa xong';
+      if (minutes < 60) return `${minutes} phút trước`;
+      if (hours < 24) return `${hours} giờ trước`;
+      if (days < 7) return `${days} ngày trước`;
+
+      return date.toLocaleString('vi-VN', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return '';
+    }
+  };
+
+  const getNotificationIcon = (type?: string) => {
+    switch (type) {
+      case 'promotion':
+        return { name: 'pricetag-outline' as const, color: '#FF9800' };
+      case 'order':
+        return { name: 'receipt-outline' as const, color: '#2196F3' };
+      case 'voucher':
+        return { name: 'gift-outline' as const, color: '#9C27B0' };
+      case 'system':
+      default:
+        return { name: 'notifications-outline' as const, color: '#607D8B' };
+    }
+  };
+
+  const tabs: { id: NotificationCategory; label: string }[] = [
     { id: 'all', label: 'Tất cả' },
-    { id: 'promotion', label: 'Khuyến mãi' },
     { id: 'order', label: 'Đơn hàng' },
+    { id: 'promotion', label: 'Khuyến mãi' },
+    { id: 'voucher', label: 'Voucher' },
     { id: 'system', label: 'Hệ thống' },
   ];
 
-  const getNotificationIcon = (type: NotificationType) => {
-    switch (type) {
-      case 'promotion':
-        return 'gift-outline';
-      case 'order':
-        return 'receipt-outline';
-      case 'system':
-        return 'settings-outline';
-      default:
-        return 'notifications-outline';
-    }
-  };
+  const filteredNotifications = useMemo(() => {
+    if (activeTab === 'all') return notifications;
+    return notifications.filter((n) => (n.type || 'system') === activeTab);
+  }, [notifications, activeTab]);
 
-  const markAsRead = (id: string) => {
-    setNotificationsList(prev =>
-      prev.map(notif => (notif.id === id ? { ...notif, isRead: true } : notif))
-    );
-  };
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
-  const markAllAsRead = () => {
-    const unreadCount = notificationsList.filter(n => !n.isRead).length;
-    if (unreadCount === 0) {
-      Alert.alert('Thông báo', 'Tất cả thông báo đã được đọc');
-      return;
-    }
-    
-    Alert.alert(
-      'Xác nhận',
-      `Bạn có muốn đánh dấu tất cả ${unreadCount} thông báo là đã đọc?`,
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Đồng ý',
-          onPress: () => {
-            setNotificationsList(prev =>
-              prev.map(notif => ({ ...notif, isRead: true }))
-            );
-          },
-        },
-      ]
-    );
-  };
+  const renderNotification = ({ item }: { item: FirestoreNotification }) => {
+    const icon = getNotificationIcon(item.type);
+    const isUnread = !item.read;
+    const title =
+      item.title ||
+      (item.type === 'order'
+        ? 'Cập nhật đơn hàng'
+        : item.type === 'promotion'
+        ? 'Khuyến mãi mới'
+        : item.type === 'voucher'
+        ? 'Voucher mới cho bạn'
+        : 'Thông báo');
+    const body = item.content || item.message || '';
 
-  const deleteNotification = (id: string) => {
-    Alert.alert(
-      'Xác nhận',
-      'Bạn có muốn xóa thông báo này?',
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Xóa',
-          style: 'destructive',
-          onPress: () => {
-            setNotificationsList(prev => prev.filter(notif => notif.id !== id));
-          },
-        },
-      ]
-    );
-  };
-
-  const unreadCount = notificationsList.filter(n => !n.isRead).length;
-
-  const renderNotification = ({ item }: { item: Notification }) => (
-    <TouchableOpacity
-      style={[
-        styles.notificationItem,
-        !item.isRead && styles.unreadNotification,
-      ]}
-      onPress={() => {
-        if (!item.isRead) {
-          markAsRead(item.id);
-        }
-      }}
-      activeOpacity={0.7}
-    >
-      <View style={styles.notificationContent}>
-        {item.image ? (
-          <Image source={{ uri: item.image }} style={styles.notificationImage} />
-        ) : (
-          <View style={[styles.iconContainer, styles[`${item.type}Icon`]]}>
-            <Ionicons
-              name={getNotificationIcon(item.type)}
-              size={24}
-              color="#fff"
-            />
-          </View>
-        )}
+    return (
+      <TouchableOpacity
+        style={[styles.notificationItem, isUnread && styles.unreadNotification]}
+        activeOpacity={0.8}
+        onPress={() => {
+          if (isUnread) {
+            markAsRead(item.id);
+          }
+        }}
+      >
+        <View style={[styles.iconContainer, { backgroundColor: `${icon.color}15` }]}>
+          <Ionicons name={icon.name} size={22} color={icon.color} />
+        </View>
         <View style={styles.textContainer}>
           <View style={styles.titleRow}>
-            <Text style={[
-              styles.notificationTitle,
-              !item.isRead && styles.unreadTitle
-            ]} numberOfLines={1}>
-              {item.title}
-            </Text>
-            <TouchableOpacity
-              style={styles.deleteButton}
-              onPress={() => deleteNotification(item.id)}
+            <Text
+              style={[styles.notificationTitle, isUnread && styles.unreadTitle]}
+              numberOfLines={1}
             >
-              <Ionicons name="close" size={18} color="#999" />
-            </TouchableOpacity>
+              {title}
+            </Text>
+            {isUnread && <View style={styles.unreadDot} />}
           </View>
-          <Text style={styles.notificationMessage} numberOfLines={2}>
-            {item.message}
-          </Text>
-          <Text style={styles.timeText}>{item.time}</Text>
+          {!!body && (
+            <Text style={styles.notificationMessage} numberOfLines={2}>
+              {body}
+            </Text>
+          )}
+          <View style={styles.footerRow}>
+            {item.type && (
+              <View style={styles.chip}>
+                <Text style={styles.chipText}>
+                  {item.type === 'order'
+                    ? 'Đơn hàng'
+                    : item.type === 'promotion'
+                    ? 'Khuyến mãi'
+                    : item.type === 'voucher'
+                    ? 'Voucher'
+                    : 'Hệ thống'}
+                </Text>
+              </View>
+            )}
+            <Text style={styles.timeText}>{formatDate(item.createdAt)}</Text>
+          </View>
         </View>
-      </View>
-      {!item.isRead && <View style={styles.unreadDot} />}
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
-  const filteredNotifications = notificationsList.filter(
-    notification => activeTab === 'all' || notification.type === activeTab
-  );
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#ee4d2d" />
+          <Text style={styles.loadingText}>Đang tải thông báo...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Thông báo</Text>
-          {unreadCount > 0 && (
+        <View style={styles.headerLeft}>
+          <View style={styles.headerIconWrapper}>
+            <Ionicons name="notifications" size={26} color="#ee4d2d" />
+            {unreadCount > 0 && (
+              <View style={styles.headerBadge}>
+                <Text style={styles.headerBadgeText}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </Text>
+              </View>
+            )}
+          </View>
+          <View>
+            <Text style={styles.headerTitle}>Thông báo</Text>
             <Text style={styles.headerSubtitle}>
-              {unreadCount} thông báo chưa đọc
+              {notifications.length} thông báo
+              {unreadCount > 0 ? ` • ${unreadCount} chưa đọc` : ''}
             </Text>
-          )}
+          </View>
         </View>
         {unreadCount > 0 && (
-          <TouchableOpacity
-            style={styles.markAllButton}
-            onPress={markAllAsRead}
-          >
+          <TouchableOpacity style={styles.markAllButton} onPress={markAllAsRead}>
+            <MaterialIcons name="done-all" size={18} color="#2196F3" />
             <Text style={styles.markAllButtonText}>Đánh dấu tất cả</Text>
           </TouchableOpacity>
         )}
@@ -204,45 +328,42 @@ const NotificationsScreen = () => {
           data={tabs}
           horizontal
           showsHorizontalScrollIndicator={false}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.tabsContent}
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={[
-                styles.tab,
-                activeTab === item.id && styles.activeTab,
-              ]}
-              onPress={() => setActiveTab(item.id as NotificationType | 'all')}
+              style={[styles.tab, activeTab === item.id && styles.activeTab]}
+              onPress={() => setActiveTab(item.id)}
             >
               <Text
-                style={[
-                  styles.tabText,
-                  activeTab === item.id && styles.activeTabText,
-                ]}
+                style={[styles.tabText, activeTab === item.id && styles.activeTabText]}
               >
                 {item.label}
               </Text>
             </TouchableOpacity>
           )}
-          keyExtractor={item => item.id}
         />
       </View>
 
-      {filteredNotifications.length > 0 ? (
-        <FlatList
-          data={filteredNotifications}
-          renderItem={renderNotification}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.notificationList}
-        />
-      ) : (
+      {filteredNotifications.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="notifications-outline" size={64} color="#ddd" />
-          <Text style={styles.emptyText}>
-            Không có thông báo nào
-          </Text>
+          <Text style={styles.emptyText}>Không có thông báo nào</Text>
           <Text style={styles.emptySubtext}>
-            Bạn sẽ nhận được thông báo khi có tin mới
+            Các cập nhật về đơn hàng, khuyến mãi và voucher sẽ hiển thị tại đây
           </Text>
         </View>
+      ) : (
+        <FlatList
+          data={filteredNotifications}
+          keyExtractor={(item) => item.id}
+          renderItem={renderNotification}
+          contentContainerStyle={styles.notificationList}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          showsVerticalScrollIndicator={false}
+        />
       )}
     </SafeAreaView>
   );
@@ -253,6 +374,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#666',
+  },
   header: {
     backgroundColor: '#fff',
     padding: 16,
@@ -261,6 +392,37 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerIconWrapper: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#fff3f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+    position: 'relative',
+  },
+  headerBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#F44336',
+    borderRadius: 9,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
   },
   headerTitle: {
     fontSize: 20,
@@ -274,21 +436,27 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   markAllButton: {
-    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 16,
-    backgroundColor: '#fff3f0',
+    backgroundColor: '#E3F2FD',
   },
   markAllButtonText: {
     fontSize: 12,
-    color: '#ee4d2d',
+    color: '#2196F3',
     fontWeight: '600',
+    marginLeft: 4,
   },
   tabs: {
     backgroundColor: '#fff',
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+  },
+  tabsContent: {
+    paddingHorizontal: 8,
   },
   tab: {
     paddingHorizontal: 16,
@@ -311,41 +479,28 @@ const styles = StyleSheet.create({
   },
   notificationItem: {
     backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 16,
+    borderRadius: 14,
+    padding: 14,
     marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
   },
   unreadNotification: {
     backgroundColor: '#fff9f8',
-  },
-  notificationContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    borderLeftWidth: 4,
+    borderLeftColor: '#ee4d2d',
   },
   iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
-  },
-  promotionIcon: {
-    backgroundColor: '#FF9800',
-  },
-  orderIcon: {
-    backgroundColor: '#2196F3',
-  },
-  systemIcon: {
-    backgroundColor: '#607D8B',
-  },
-  notificationImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
     marginRight: 12,
   },
   textContainer: {
@@ -367,15 +522,28 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1f2937',
   },
-  deleteButton: {
-    padding: 4,
-    marginLeft: 8,
-  },
   notificationMessage: {
     fontSize: 14,
     color: '#666',
     marginBottom: 4,
     lineHeight: 20,
+  },
+  footerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  chip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: '#f3f4f6',
+  },
+  chipText: {
+    fontSize: 11,
+    color: '#4b5563',
+    fontWeight: '500',
   },
   timeText: {
     fontSize: 12,
@@ -408,4 +576,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default NotificationsScreen; 
+export default NotificationsScreen;

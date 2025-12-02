@@ -40,40 +40,80 @@ const getExpoHostIp = () => {
   return `http://${host}:11434`;
 };
 
-// Base URL theo từng môi trường chạy app
-const getOllamaBaseUrl = () => {
-  const envUrl = getEnvOllamaUrl();
-  if (envUrl) {
-    return envUrl;
+const getDefaultCandidates = () => {
+  const candidates: string[] = [];
+  const addCandidate = (value: string | null | undefined) => {
+    if (!value) return;
+    const sanitized = sanitizeUrl(value);
+    if (!candidates.includes(sanitized)) {
+      candidates.push(sanitized);
+    }
+  };
+
+  addCandidate(getEnvOllamaUrl());
+
+  if (__DEV__) {
+    addCandidate(getExpoHostIp());
   }
 
   if (Platform.OS === 'web') {
     if (typeof window !== 'undefined' && window.location?.origin) {
-      return sanitizeUrl(window.location.origin.replace(/:\d+$/, ':11434'));
-    }
-
-    return "http://localhost:11434";
-  }
-
-  // Nếu đang chạy dev qua Expo (Android/iOS), ưu tiên IP chung mạng
-  if (__DEV__) {
-    const expoHost = getExpoHostIp();
-    if (expoHost) {
-      return expoHost;
+      addCandidate(window.location.origin.replace(/:\d+$/, ':11434'));
+    } else {
+      addCandidate('http://localhost:11434');
     }
   }
 
-  if (Platform.OS === "android") {
-    // Android emulator cannot access 127.0.0.1
-    return "http://10.0.2.2:11434";
+  if (Platform.OS === 'android') {
+    addCandidate('http://10.0.2.2:11434');
   }
 
-  // Web, iOS simulator hoặc thiết bị thật (nếu cùng wifi)
-  return "http://127.0.0.1:11434";
+  addCandidate('http://127.0.0.1:11434');
+  return candidates;
 };
 
+let cachedBaseUrl: string | null = null;
 
-const OLLAMA_BASE_URL = getOllamaBaseUrl();
+const pingOllama = async (baseUrl: string, timeoutMs = 4000) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(`${baseUrl}/api/tags`, {
+      method: 'GET',
+      signal: controller.signal,
+    });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
+const resolveReachableBaseUrl = async (forceRefresh = false): Promise<string> => {
+  if (!forceRefresh && cachedBaseUrl) {
+    return cachedBaseUrl;
+  }
+
+  const candidates = getDefaultCandidates();
+
+  for (const candidate of candidates) {
+    const alive = await pingOllama(candidate);
+    if (alive) {
+      cachedBaseUrl = candidate;
+      return candidate;
+    }
+  }
+
+  throw new Error(
+    'Không tìm thấy máy chủ AI khả dụng. Hãy đảm bảo Ollama đang chạy và thiết bị cùng mạng hoặc đặt EXPO_PUBLIC_OLLAMA_URL.'
+  );
+};
+
+const invalidateCachedBaseUrl = () => {
+  cachedBaseUrl = null;
+};
 const DEFAULT_MODEL = "llama3.2";
 
 export interface ChatMessage {
@@ -89,16 +129,13 @@ export const sendMessageToOllama = async (
   conversationHistory: ChatMessage[] = [],
   model: string = DEFAULT_MODEL
 ): Promise<string> => {
-
   if (!message.trim()) {
     throw new Error("Message không được để trống");
   }
 
-  // SYSTEM PROMPT
   const systemPrompt = `Bạn là trợ lý AI của ứng dụng đặt đồ ăn FoodOrder. 
 Trả lời ngắn gọn, thân thiện bằng tiếng Việt.`;
 
-  // Format đúng chuẩn Ollama
   const messages = [
     { role: "system", content: systemPrompt },
     ...conversationHistory.map((m) => ({ role: m.role, content: m.content })),
@@ -107,77 +144,85 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt.`;
 
   console.log("➡ Sending:", messages);
 
-  // Timeout 30s
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  const attemptSend = async (forceResolve = false): Promise<string> => {
+    const baseUrl = await resolveReachableBaseUrl(forceResolve);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-  try {
-    const response = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        messages,
-        stream: false,
-      }),
-      signal: controller.signal,
-    });
+    try {
+      const response = await fetch(`${baseUrl}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          messages,
+          stream: false,
+        }),
+        signal: controller.signal,
+      });
 
-    clearTimeout(timeoutId);
+      clearTimeout(timeoutId);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("❌ API ERROR:", errorText);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("❌ API ERROR:", errorText);
 
-      if (response.status === 404) {
-        throw new Error(`Model "${model}" không tồn tại. Hãy chạy: ollama pull ${model}`);
+        if (response.status === 404) {
+          throw new Error(`Model "${model}" không tồn tại. Hãy chạy: ollama pull ${model}`);
+        }
+
+        throw new Error("Lỗi từ Ollama: " + errorText);
       }
 
-      throw new Error("Lỗi từ Ollama: " + errorText);
+      const data = await response.json();
+      console.log("✔ RESPONSE:", data);
+
+      const reply =
+        data?.message?.content ||
+        data?.response ||
+        data?.content ||
+        "";
+
+      if (!reply.trim()) {
+        return "Xin lỗi, tôi không thể trả lời câu hỏi này.";
+      }
+
+      return reply.trim();
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+
+      if (err?.name === "AbortError") {
+        throw new Error("Quá thời gian chờ. Ollama không phản hồi.");
+      }
+
+      const msg = err?.message?.toLowerCase() || "";
+      const networkError =
+        msg.includes("failed to fetch") ||
+        msg.includes("network") ||
+        msg.includes("refused") ||
+        msg.includes("typeerror");
+
+      if (networkError && !forceResolve) {
+        invalidateCachedBaseUrl();
+        return attemptSend(true);
+      }
+
+      if (networkError) {
+        const note =
+          Platform.OS === "web"
+            ? `Hãy chạy:  OLLAMA_ORIGINS="*" ollama serve`
+            : "";
+
+        throw new Error(
+          `Không thể kết nối tới Ollama. ${note}`
+        );
+      }
+
+      throw err;
     }
+  };
 
-    const data = await response.json();
-    console.log("✔ RESPONSE:", data);
-
-    // Chuẩn Ollama: data.message.content
-    const reply =
-      data?.message?.content ||
-      data?.response ||
-      data?.content ||
-      "";
-
-    if (!reply.trim()) {
-      return "Xin lỗi, tôi không thể trả lời câu hỏi này.";
-    }
-
-    return reply.trim();
-  } catch (err: any) {
-    clearTimeout(timeoutId);
-
-    if (err?.name === "AbortError") {
-      throw new Error("Quá thời gian chờ. Ollama không phản hồi.");
-    }
-
-    const msg = err?.message?.toLowerCase() || "";
-
-    if (
-      msg.includes("failed to fetch") ||
-      msg.includes("network") ||
-      msg.includes("refused") ||
-      msg.includes("typeerror")
-    ) {
-      const note =
-        Platform.OS === "web"
-          ? `Hãy chạy:  OLLAMA_ORIGINS="*" ollama serve`
-          : "";
-
-      throw new Error(
-        `Không thể kết nối tới Ollama tại ${OLLAMA_BASE_URL}. ${note}`
-      );
-    }
-
-    throw err;
-  }
+  return attemptSend(false);
 };
 
 /**
@@ -185,9 +230,10 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt.`;
  */
 export const checkOllamaConnection = async (): Promise<boolean> => {
   try {
-    const res = await fetch(`${OLLAMA_BASE_URL}/api/tags`);
-    return res.ok;
+    await resolveReachableBaseUrl(true);
+    return true;
   } catch (e) {
+    invalidateCachedBaseUrl();
     return false;
   }
 };
@@ -197,12 +243,14 @@ export const checkOllamaConnection = async (): Promise<boolean> => {
  */
 export const getAvailableModels = async (): Promise<string[]> => {
   try {
-    const res = await fetch(`${OLLAMA_BASE_URL}/api/tags`);
+    const baseUrl = await resolveReachableBaseUrl();
+    const res = await fetch(`${baseUrl}/api/tags`);
     if (!res.ok) return [DEFAULT_MODEL];
 
     const data = await res.json();
     return data.models?.map((m: any) => m.name) ?? [DEFAULT_MODEL];
   } catch (e) {
+    invalidateCachedBaseUrl();
     return [DEFAULT_MODEL];
   }
 };

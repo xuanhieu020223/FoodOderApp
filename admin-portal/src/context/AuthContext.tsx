@@ -34,6 +34,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initializing, setInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -45,29 +46,43 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (!user) {
         setProfile(null);
         setLoading(false);
+        setInitializing(false);
         return;
       }
 
       try {
         const profileSnap = await getDoc(doc(db, 'users', user.uid));
-        if (profileSnap.exists()) {
-          const data = profileSnap.data() as UserProfile | undefined;
-          setProfile({
-            ...(data ?? {}),
-            id: profileSnap.id,
-          });
-        } else {
-          setProfile({
-            id: user.uid,
-            email: user.email ?? '',
-          });
+        if (!profileSnap.exists()) {
+          await signOut(auth);
+          setProfile(null);
+          setError('Tài khoản này chưa được đăng ký trong hệ thống.');
+          setLoading(false);
+          setInitializing(false);
+          return;
         }
+
+        const data = profileSnap.data() as UserProfile | undefined;
+        const role = (data?.role ?? '').toLowerCase();
+        if (role !== 'admin') {
+          await signOut(auth);
+          setProfile(null);
+          setError('Tài khoản này không có quyền admin.');
+          setLoading(false);
+          setInitializing(false);
+          return;
+        }
+
+        setProfile({
+          ...(data ?? {}),
+          id: profileSnap.id,
+        });
       } catch (err) {
         console.error('Error loading profile', err);
         setError('Không thể tải thông tin người dùng');
         setProfile(null);
       } finally {
         setLoading(false);
+        setInitializing(false);
       }
     });
 
@@ -78,7 +93,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     () => ({
       firebaseUser,
       profile,
-      loading,
+      loading: loading || initializing,
       error,
       isAdmin: (profile?.role ?? '').toLowerCase() === 'admin',
       signOutUser: () => signOut(auth),

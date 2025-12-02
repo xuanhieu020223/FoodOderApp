@@ -14,7 +14,8 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { collection, query, where, orderBy, getDocs, doc, updateDoc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, doc, updateDoc, Timestamp, runTransaction, addDoc } from 'firebase/firestore';
+import type { DocumentReference } from 'firebase/firestore';
 import { auth, db } from '../../config/Firebase';
 import { useNavigation } from '@react-navigation/native';
 import FloatingChatButton from '../../components/FloatingChatButton';
@@ -57,7 +58,7 @@ interface Order {
 const DEFAULT_RESTAURANT_IMAGE = 'https://cdn-icons-png.flaticon.com/512/3595/3595455.png';
 
 const OrdersScreen = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<OrderStatus | 'all'>('all');
@@ -113,7 +114,6 @@ const OrdersScreen = () => {
       setLoading(false);
     } catch (error) {
       console.error('Error loading orders:', error);
-      Alert.alert('Lỗi', 'Không thể tải danh sách đơn hàng');
       setLoading(false);
     }
   };
@@ -131,7 +131,6 @@ const OrdersScreen = () => {
       Alert.alert('Thành công', 'Đã hủy đơn hàng');
     } catch (error) {
       console.error('Error cancelling order:', error);
-      Alert.alert('Lỗi', 'Không thể hủy đơn hàng');
     }
   };
 
@@ -140,7 +139,9 @@ const OrdersScreen = () => {
 
     try {
       setSubmittingReview(true);
-      const updateData: any = {};
+      const updateData: any = {
+        updatedAt: Timestamp.now(),
+      };
       
       if (ratingType === 'overall') {
         updateData.rating = rating;
@@ -152,7 +153,10 @@ const OrdersScreen = () => {
         updateData.shipperRating = shipperRating;
         updateData.shipperReview = shipperReview;
       } else if (ratingType === 'items') {
-        updateData.itemRatings = itemRatings;
+        updateData.itemRatings = {
+          ...(selectedOrder.itemRatings ?? {}),
+          ...itemRatings,
+        };
       }
 
       await updateDoc(doc(db, 'orders', selectedOrder.id), updateData);
@@ -160,21 +164,62 @@ const OrdersScreen = () => {
       // Update restaurant rating if restaurant rating was submitted
       if (ratingType === 'restaurant' && selectedOrder.restaurantId) {
         await updateRestaurantRating(selectedOrder.restaurantId, restaurantRating);
+        await recordRatingHistory({
+          orderId: selectedOrder.id,
+          ratingType: 'restaurant',
+          targetId: selectedOrder.restaurantId,
+          rating: restaurantRating,
+          review: restaurantReview,
+        });
       }
 
       // Update shipper rating if shipper rating was submitted
       if (ratingType === 'shipper' && selectedOrder.shipperId) {
         await updateShipperRating(selectedOrder.shipperId, shipperRating);
+        await recordRatingHistory({
+          orderId: selectedOrder.id,
+          ratingType: 'shipper',
+          targetId: selectedOrder.shipperId,
+          rating: shipperRating,
+          review: shipperReview,
+        });
       }
 
       // Update food item ratings if item ratings were submitted
       if (ratingType === 'items') {
         await updateFoodRatings(itemRatings);
+        await Promise.all(
+          Object.entries(itemRatings).map(([foodId, ratingPayload]) => {
+            if (!ratingPayload?.rating) {
+              return Promise.resolve();
+            }
+
+            return recordRatingHistory({
+              orderId: selectedOrder.id,
+              ratingType: 'item',
+              targetId: foodId,
+              rating: ratingPayload.rating,
+              review: ratingPayload.review,
+            });
+          })
+        );
       }
 
-      setOrders(orders.map(order =>
-        order.id === selectedOrder.id ? { ...order, ...updateData } : order
-      ));
+      if (ratingType === 'overall') {
+        await recordRatingHistory({
+          orderId: selectedOrder.id,
+          ratingType: 'overall',
+          targetId: selectedOrder.restaurantId ?? selectedOrder.shipperId ?? selectedOrder.userId,
+          rating,
+          review,
+        });
+      }
+
+      setOrders((prevOrders) =>
+        prevOrders.map(order =>
+          order.id === selectedOrder.id ? { ...order, ...updateData } : order
+        )
+      );
 
       setReviewModalVisible(false);
       setSelectedOrder(null);
@@ -189,45 +234,65 @@ const OrdersScreen = () => {
       Alert.alert('Thành công', 'Cảm ơn bạn đã đánh giá');
     } catch (error) {
       console.error('Error submitting review:', error);
-      Alert.alert('Lỗi', 'Không thể gửi đánh giá');
     } finally {
       setSubmittingReview(false);
     }
   };
 
+  const updateAggregatedRating = async (ref: DocumentReference, newRatingValue: number) => {
+    await runTransaction(db, async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      const data = snapshot.exists() ? snapshot.data() : {};
+      const previousCount =
+        data && typeof data.totalRatings === 'number' ? data.totalRatings : 0;
+      const previousTotalValue =
+        data && typeof data.totalRatingValue === 'number'
+          ? data.totalRatingValue
+          : previousCount > 0 && typeof data.rating === 'number'
+          ? data.rating * previousCount
+          : 0;
+
+      const totalRatings = previousCount + 1;
+      const totalRatingValue = previousTotalValue + newRatingValue;
+      const averageRating = totalRatingValue / totalRatings;
+
+      transaction.set(
+        ref,
+        {
+          totalRatings,
+          totalRatingValue,
+          rating: Number(averageRating.toFixed(1)),
+        },
+        { merge: true }
+      );
+    });
+  };
+
+  type RatingHistoryPayload = {
+    orderId: string;
+    ratingType: 'overall' | 'restaurant' | 'shipper' | 'item';
+    rating: number;
+    review?: string;
+    targetId?: string;
+  };
+
+  const recordRatingHistory = async (payload: RatingHistoryPayload) => {
+    const user = auth.currentUser;
+    if (!user || !payload.rating) {
+      return;
+    }
+
+    await addDoc(collection(db, 'ratings'), {
+      ...payload,
+      userId: user.uid,
+      createdAt: Timestamp.now(),
+    });
+  };
+
   const updateRestaurantRating = async (restaurantId: string, newRating: number) => {
     try {
-      // Get all orders for this restaurant
-      const ordersRef = collection(db, 'orders');
-      const q = query(
-        ordersRef,
-        where('restaurantId', '==', restaurantId),
-        where('restaurantRating', '!=', null)
-      );
-      const snapshot = await getDocs(q);
-      
-      let totalRating = 0;
-      let count = 0;
-      
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        if (data.restaurantRating) {
-          totalRating += data.restaurantRating;
-          count++;
-        }
-      });
-      
-      // Add the new rating
-      totalRating += newRating;
-      count++;
-      
-      const averageRating = totalRating / count;
-      
-      // Update restaurant document
-      await updateDoc(doc(db, 'restaurants', restaurantId), {
-        rating: averageRating,
-        totalRatings: count,
-      });
+      const restaurantRef = doc(db, 'restaurants', restaurantId);
+      await updateAggregatedRating(restaurantRef, newRating);
     } catch (error) {
       console.error('Error updating restaurant rating:', error);
     }
@@ -235,37 +300,8 @@ const OrdersScreen = () => {
 
   const updateShipperRating = async (shipperId: string, newRating: number) => {
     try {
-      // Get all orders for this shipper
-      const ordersRef = collection(db, 'orders');
-      const q = query(
-        ordersRef,
-        where('shipperId', '==', shipperId),
-        where('shipperRating', '!=', null)
-      );
-      const snapshot = await getDocs(q);
-      
-      let totalRating = 0;
-      let count = 0;
-      
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        if (data.shipperRating) {
-          totalRating += data.shipperRating;
-          count++;
-        }
-      });
-      
-      // Add the new rating
-      totalRating += newRating;
-      count++;
-      
-      const averageRating = totalRating / count;
-      
-      // Update shipper document
-      await updateDoc(doc(db, 'users', shipperId), {
-        rating: averageRating,
-        totalRatings: count,
-      });
+      const shipperRef = doc(db, 'users', shipperId);
+      await updateAggregatedRating(shipperRef, newRating);
     } catch (error) {
       console.error('Error updating shipper rating:', error);
     }
@@ -273,35 +309,16 @@ const OrdersScreen = () => {
 
   const updateFoodRatings = async (ratings: { [foodId: string]: { rating: number; review?: string } }) => {
     try {
-      for (const [foodId, ratingData] of Object.entries(ratings)) {
-        // Get all orders with this food item
-        const ordersRef = collection(db, 'orders');
-        const ordersSnapshot = await getDocs(ordersRef);
-        
-        let totalRating = 0;
-        let count = 0;
-        
-        ordersSnapshot.forEach((doc) => {
-          const orderData = doc.data();
-          const itemRatings = orderData.itemRatings || {};
-          if (itemRatings[foodId]?.rating) {
-            totalRating += itemRatings[foodId].rating;
-            count++;
-          }
-        });
-        
-        // Add the new rating
-        totalRating += ratingData.rating;
-        count++;
-        
-        const averageRating = totalRating / count;
-        
-        // Update food document
-        await updateDoc(doc(db, 'foods', foodId), {
-          rating: averageRating,
-          totalRatings: count,
-        });
-      }
+      const updatePromises = Object.entries(ratings).map(([foodId, ratingData]) => {
+        if (!ratingData?.rating) {
+          return Promise.resolve();
+        }
+
+        const foodRef = doc(db, 'foods', foodId);
+        return updateAggregatedRating(foodRef, ratingData.rating);
+      });
+
+      await Promise.all(updatePromises);
     } catch (error) {
       console.error('Error updating food ratings:', error);
     }
@@ -555,11 +572,11 @@ const OrdersScreen = () => {
             </View>
           )}
 
-          {(item.status === 'shipping' || item.status === 'processing' || item.status === 'delivering') && (
+          {(item.status === 'shipping' || item.status === 'processing') && (
             <TouchableOpacity
               style={[styles.actionButton, styles.trackButton]}
               onPress={() => {
-                navigation.navigate('OrderTracking' as never, { orderId: item.id, userRole: 'customer' } as never);
+                navigation.navigate('OrderTracking', { orderId: item.id, userRole: 'customer' });
               }}
             >
               <Ionicons name="map" size={18} color="#fff" />
@@ -593,6 +610,23 @@ const OrdersScreen = () => {
     ...tab,
     count: tab.id === 'all' ? orders.length : orders.filter(o => o.status === tab.id).length
   }));
+
+  const getEmptyMessage = () => {
+    if (activeTab === 'all') {
+      return {
+        prefix: 'Bạn chưa có đơn hàng nào. Hãy đặt món ngay!',
+        suffix: '',
+      };
+    }
+
+    const matchedLabel = tabCounts.find((t) => t.id === activeTab)?.label ?? '';
+    return {
+      prefix: 'Chưa có đơn hàng',
+      suffix: matchedLabel.toLowerCase(),
+    };
+  };
+
+  const emptyMessage = getEmptyMessage();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -649,14 +683,16 @@ const OrdersScreen = () => {
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={() => (
           <View style={styles.emptyContainer}>
-            <MaterialIcons name="receipt-outline" size={80} color="#ddd" />
+            <Ionicons name="receipt-outline" size={80} color="#ddd" />
             <Text style={styles.emptyTitle}>Chưa có đơn hàng nào</Text>
-            <Text style={styles.emptyText}>
-              {activeTab === 'all' 
-                ? 'Bạn chưa có đơn hàng nào. Hãy đặt món ngay!'
-                : `Chưa có đơn hàng ${tabCounts.find(t => t.id === activeTab)?.label.toLowerCase()}`
-              }
-            </Text>
+            {activeTab === 'all' ? (
+              <Text style={styles.emptyText}>{emptyMessage.prefix}</Text>
+            ) : (
+              <Text style={styles.emptyText}>
+                {emptyMessage.prefix}{' '}
+                <Text style={styles.emptyTextHighlight}>{emptyMessage.suffix}</Text>
+              </Text>
+            )}
           </View>
         )}
       />
@@ -711,12 +747,12 @@ const OrdersScreen = () => {
                     <Ionicons name="location" size={20} color="#ee4d2d" />
                     <Text style={styles.addressText}>{selectedOrder.address}</Text>
                   </View>
-                  {(selectedOrder.status === 'shipping' || selectedOrder.status === 'processing' || selectedOrder.status === 'delivering') && (
+                  {(selectedOrder.status === 'shipping' || selectedOrder.status === 'processing') && (
                     <TouchableOpacity
                       style={styles.trackButtonInModal}
                       onPress={() => {
                         setDetailsModalVisible(false);
-                        navigation.navigate('OrderTracking' as never, { orderId: selectedOrder.id, userRole: 'customer' } as never);
+                        navigation.navigate('OrderTracking', { orderId: selectedOrder.id, userRole: 'customer' });
                       }}
                     >
                       <Ionicons name="map" size={18} color="#fff" />
@@ -982,8 +1018,9 @@ const OrdersScreen = () => {
                     <Text style={styles.ratingSectionTitle}>Đánh giá món ăn</Text>
                   </View>
                   {selectedOrder.items.map((item, index) => {
-                    const currentRating = itemRatings[item.foodId]?.rating || 5;
-                    const currentReview = itemRatings[item.foodId]?.review || '';
+                    const foodKey = item.id;
+                    const currentRating = itemRatings[foodKey]?.rating || 5;
+                    const currentReview = itemRatings[foodKey]?.review || '';
                     return (
                       <View key={index} style={styles.itemRatingCard}>
                         <View style={styles.itemRatingHeader}>
@@ -1000,9 +1037,9 @@ const OrdersScreen = () => {
                               onPress={() => {
                                 setItemRatings({
                                   ...itemRatings,
-                                  [item.foodId]: {
+                                  [foodKey]: {
                                     rating: star,
-                                    review: itemRatings[item.foodId]?.review || '',
+                                    review: itemRatings[foodKey]?.review || '',
                                   },
                                 });
                               }}
@@ -1023,7 +1060,7 @@ const OrdersScreen = () => {
                           onChangeText={(text) => {
                             setItemRatings({
                               ...itemRatings,
-                              [item.foodId]: {
+                              [foodKey]: {
                                 rating: currentRating,
                                 review: text,
                               },
@@ -1376,6 +1413,11 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     paddingHorizontal: 40,
+  },
+  emptyTextHighlight: {
+    fontSize: 14,
+    color: '#ee4d2d',
+    fontWeight: '600',
   },
   modalContainer: {
     flex: 1,

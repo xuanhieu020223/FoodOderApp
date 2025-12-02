@@ -16,6 +16,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import { collection, query, getDocs, addDoc, updateDoc, deleteDoc, doc, orderBy } from 'firebase/firestore';
 import { db } from '../../config/Firebase';
+import { Card, Button, Tag, Empty } from '../../components/admin/AntDesignComponents';
 
 // Danh sách icon có sẵn cho danh mục
 const CATEGORY_ICONS = [
@@ -195,31 +196,35 @@ const CategoryItem = memo(({
   onEdit: (category: Category) => void;
   onDelete: (id: string) => void;
 }) => (
-  <View style={styles.categoryCard}>
-    <View style={styles.categoryIcon}>
-      <MaterialIcons name={item.icon} size={24} color="#ee4d2d" />
-    </View>
-    
-    <View style={styles.categoryInfo}>
-      <Text style={styles.categoryName}>{item.name}</Text>
-    </View>
-
-    <View style={styles.categoryActions}>
-      <TouchableOpacity
-        style={[styles.actionButton, styles.editButton]}
-        onPress={() => onEdit(item)}
-      >
-        <MaterialIcons name="edit" size={20} color="#fff" />
-      </TouchableOpacity>
+  <Card style={styles.categoryCard} bordered={true} shadow={true}>
+    <View style={styles.categoryContent}>
+      <View style={styles.categoryIcon}>
+        <MaterialIcons name={item.icon} size={28} color="#1890ff" />
+      </View>
       
-      <TouchableOpacity
-        style={[styles.actionButton, styles.deleteButton]}
-        onPress={() => onDelete(item.id)}
-      >
-        <MaterialIcons name="delete" size={20} color="#fff" />
-      </TouchableOpacity>
+      <View style={styles.categoryInfo}>
+        <Text style={styles.categoryName}>{item.name}</Text>
+      </View>
+
+      <View style={styles.categoryActions}>
+        <Button
+          type="default"
+          size="small"
+          icon="edit"
+          onPress={() => onEdit(item)}
+          style={styles.actionButton}
+        />
+        
+        <Button
+          type="primary"
+          size="small"
+          icon="delete"
+          onPress={() => onDelete(item.id)}
+          style={[styles.actionButton, { backgroundColor: '#ff4d4f', borderColor: '#ff4d4f' }]}
+        />
+      </View>
     </View>
-  </View>
+  </Card>
 ));
 
 const ManageCategoriesScreen = () => {
@@ -355,12 +360,12 @@ const ManageCategoriesScreen = () => {
         )}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContainer}
-        ListEmptyComponent={() => (
-          <View style={styles.emptyContainer}>
-            <MaterialIcons name="category" size={64} color="#ccc" />
-            <Text style={styles.emptyText}>Chưa có danh mục nào</Text>
-          </View>
-        )}
+        ListEmptyComponent={
+          <Empty
+            description="Chưa có danh mục nào"
+            image={<MaterialIcons name="category" size={64} color="#d9d9d9" />}
+          />
+        }
       />
 
       <CategoryFormModal
@@ -437,18 +442,13 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   categoryCard: {
+    marginBottom: 12,
+  },
+  categoryContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    padding: 4,
   },
   categoryIcon: {
     width: 40,
@@ -472,11 +472,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   actionButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
+    minWidth: 80,
     marginLeft: 8,
   },
   editButton: {

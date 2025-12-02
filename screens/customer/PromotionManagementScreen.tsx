@@ -25,6 +25,7 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import { db } from '../../config/Firebase';
+import { Card, Button, Tag, Badge, Empty } from '../../components/admin/AntDesignComponents';
 
 type PromotionStatus = 'scheduled' | 'active' | 'paused' | 'expired';
 type DiscountType = 'percentage' | 'amount';
@@ -276,6 +277,30 @@ const PromotionManagementScreen = () => {
     );
   }, [promotions]);
 
+  // Thống kê sử dụng khuyến mãi
+  const usageStats = useMemo(() => {
+    const totalUsed = promotions.reduce((sum, p) => sum + (p.usedCount || 0), 0);
+    const totalLimit = promotions.reduce((sum, p) => {
+      if (p.usageLimit) return sum + p.usageLimit;
+      return sum;
+    }, 0);
+    const activePromotions = promotions.filter(p => p.status === 'active');
+    const activeUsed = activePromotions.reduce((sum, p) => sum + (p.usedCount || 0), 0);
+    const activeLimit = activePromotions.reduce((sum, p) => {
+      if (p.usageLimit) return sum + p.usageLimit;
+      return sum;
+    }, 0);
+
+    return {
+      totalUsed,
+      totalLimit,
+      activeUsed,
+      activeLimit,
+      usageRate: totalLimit > 0 ? (totalUsed / totalLimit) * 100 : 0,
+      activeUsageRate: activeLimit > 0 ? (activeUsed / activeLimit) * 100 : 0,
+    };
+  }, [promotions]);
+
   const formatDate = (value?: Timestamp | null) => {
     if (!value) return 'Không thời hạn';
     try {
@@ -285,17 +310,25 @@ const PromotionManagementScreen = () => {
     }
   };
 
-  const renderPromotionCard = ({ item }: { item: Promotion }) => (
-    <View style={styles.promotionCard}>
-      <View style={styles.promotionHeader}>
-        <View>
-          <Text style={styles.promotionTitle}>{item.title || 'Chưa đặt tên'}</Text>
-          <Text style={styles.promotionCode}>Mã: {item.code}</Text>
+  const renderPromotionCard = ({ item }: { item: Promotion }) => {
+    const statusColors: Record<PromotionStatus, string> = {
+      active: '#52c41a',
+      paused: '#faad14',
+      scheduled: '#1890ff',
+      expired: '#8c8c8c',
+    };
+
+    return (
+      <Card style={styles.promotionCard} bordered={true} shadow={true}>
+        <View style={styles.promotionHeader}>
+          <View style={styles.promotionHeaderText}>
+            <Text style={styles.promotionTitle}>{item.title || 'Chưa đặt tên'}</Text>
+            <Text style={styles.promotionCode}>Mã: {item.code}</Text>
+          </View>
+          <Tag color={statusColors[item.status]}>
+            {STATUS_LABELS[item.status]}
+          </Tag>
         </View>
-        <View style={[styles.statusChip, styles[`statusChip_${item.status}` as keyof typeof styles]]}>
-          <Text style={styles.statusChipText}>{STATUS_LABELS[item.status]}</Text>
-        </View>
-      </View>
 
       <Text style={styles.promotionDescription} numberOfLines={2}>
         {item.description || 'Chưa có mô tả'}
@@ -333,34 +366,40 @@ const PromotionManagementScreen = () => {
         </View>
       </View>
 
-      <View style={styles.cardActions}>
-        <TouchableOpacity style={styles.actionGhostButton} onPress={() => openModal(item)}>
-          <MaterialIcons name="edit" size={18} color="#2196F3" />
-          <Text style={[styles.actionGhostText, { color: '#2196F3' }]}>Chỉnh sửa</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.actionGhostButton}
-          onPress={() => handleTogglePause(item)}
-        >
-          <MaterialIcons
-            name={item.status === 'paused' ? 'play-arrow' : 'pause'}
-            size={18}
-            color="#FF9800"
-          />
-          <Text style={[styles.actionGhostText, { color: '#FF9800' }]}>
-            {item.status === 'paused' ? 'Kích hoạt' : 'Tạm dừng'}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.actionGhostButton}
-          onPress={() => handleDeletePromotion(item)}
-        >
-          <MaterialIcons name="delete" size={18} color="#f44336" />
-          <Text style={[styles.actionGhostText, { color: '#f44336' }]}>Xóa</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+        <View style={styles.cardActions}>
+          <Button
+            type="ghost"
+            size="small"
+            icon="edit"
+            onPress={() => openModal(item)}
+            style={styles.actionButton}
+          >
+            Chỉnh sửa
+          </Button>
+          <Button
+            type="ghost"
+            size="small"
+            icon={item.status === 'paused' ? 'play-arrow' : 'pause'}
+            onPress={() => handleTogglePause(item)}
+            style={[styles.actionButton, { borderColor: '#faad14' }]}
+          >
+            <Text style={{ color: '#faad14' }}>
+              {item.status === 'paused' ? 'Kích hoạt' : 'Tạm dừng'}
+            </Text>
+          </Button>
+          <Button
+            type="ghost"
+            size="small"
+            icon="delete"
+            onPress={() => handleDeletePromotion(item)}
+            style={[styles.actionButton, { borderColor: '#ff4d4f' }]}
+          >
+            <Text style={{ color: '#ff4d4f' }}>Xóa</Text>
+          </Button>
+        </View>
+      </Card>
+    );
+  };
 
   if (loading) {
     return (
@@ -372,29 +411,55 @@ const PromotionManagementScreen = () => {
 
   return (
     <View style={styles.container}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.statsRow}
-        contentContainerStyle={styles.statsRowContent}
-      >
-        <View style={[styles.statCard, styles.statCardPrimary]}>
-          <Text style={styles.statValue}>{statusStats.active || 0}</Text>
-          <Text style={styles.statLabel}>Đang chạy</Text>
+      <Card title="Thống kê trạng thái" style={styles.statsCard}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.statsRowContent}
+        >
+          <View style={[styles.statCard, styles.statCardPrimary]}>
+            <Text style={styles.statValue}>{statusStats.active || 0}</Text>
+            <Text style={styles.statLabel}>Đang chạy</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statValue}>{statusStats.scheduled || 0}</Text>
+            <Text style={styles.statLabel}>Sắp chạy</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statValue}>{statusStats.paused || 0}</Text>
+            <Text style={styles.statLabel}>Tạm dừng</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statValue}>{statusStats.expired || 0}</Text>
+            <Text style={styles.statLabel}>Hết hạn</Text>
+          </View>
+        </ScrollView>
+      </Card>
+
+      <Card title="Thống kê sử dụng" style={styles.statsCard}>
+        <View style={styles.usageStatsContainer}>
+          <View style={styles.usageStatItem}>
+            <Text style={styles.usageStatValue}>{usageStats.totalUsed}</Text>
+            <Text style={styles.usageStatLabel}>Tổng lượt sử dụng</Text>
+          </View>
+          <View style={styles.usageStatItem}>
+            <Text style={styles.usageStatValue}>
+              {usageStats.usageRate.toFixed(1)}%
+            </Text>
+            <Text style={styles.usageStatLabel}>Tỷ lệ sử dụng</Text>
+          </View>
+          <View style={styles.usageStatItem}>
+            <Text style={styles.usageStatValue}>{usageStats.activeUsed}</Text>
+            <Text style={styles.usageStatLabel}>Đang chạy đã dùng</Text>
+          </View>
+          <View style={styles.usageStatItem}>
+            <Text style={styles.usageStatValue}>
+              {usageStats.activeUsageRate.toFixed(1)}%
+            </Text>
+            <Text style={styles.usageStatLabel}>Tỷ lệ đang chạy</Text>
+          </View>
         </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{statusStats.scheduled || 0}</Text>
-          <Text style={styles.statLabel}>Sắp chạy</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{statusStats.paused || 0}</Text>
-          <Text style={styles.statLabel}>Tạm dừng</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{statusStats.expired || 0}</Text>
-          <Text style={styles.statLabel}>Hết hạn</Text>
-        </View>
-      </ScrollView>
+      </Card>
 
       <View style={styles.toolbar}>
         <View style={styles.searchBox}>
@@ -445,11 +510,10 @@ const PromotionManagementScreen = () => {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <MaterialIcons name='campaign' size={48} color="#ccc" />
-            <Text style={styles.emptyTitle}>Chưa có campaign</Text>
-            <Text style={styles.emptySubtitle}>Tạo chương trình mới để bắt đầu thu hút khách hàng.</Text>
-          </View>
+          <Empty
+            description="Chưa có campaign. Tạo chương trình mới để bắt đầu thu hút khách hàng."
+            image={<MaterialIcons name="campaign" size={64} color="#d9d9d9" />}
+          />
         }
       />
 
@@ -893,6 +957,40 @@ const styles = StyleSheet.create({
     marginTop: 10,
     height: 52,
     justifyContent: 'center',
+  },
+  statsCard: {
+    marginBottom: 16,
+    marginHorizontal: 16,
+  },
+  promotionHeaderText: {
+    flex: 1,
+  },
+  actionButton: {
+    flex: 1,
+    marginHorizontal: 4,
+  },
+  usageStatsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  usageStatItem: {
+    width: '48%',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+  },
+  usageStatValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1890ff',
+    marginBottom: 4,
+  },
+  usageStatLabel: {
+    fontSize: 12,
+    color: '#8c8c8c',
+    textAlign: 'center',
   },
 });
 

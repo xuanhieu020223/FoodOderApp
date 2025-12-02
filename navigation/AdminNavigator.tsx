@@ -14,12 +14,15 @@ import PromotionManagementScreen from '../screens/customer/PromotionManagementSc
 import SupportCenterScreen from '../screens/customer/SupportCenterScreen';
 import OrderTrackingScreen from '../screens/OrderTrackingScreen';
 import RestaurantAccountScreen from '../screens/customer/RestaurantAccountScreen';
+import RestaurantNotificationsScreen from '../screens/customer/RestaurantNotificationsScreen';
+import ManageRestaurantsScreen from '../screens/customer/ManageRestaurantsScreen';
 
 export type RestaurantTabParamList = {
   Orders: undefined;
   Menu: undefined;
   Revenue: undefined;
   Promotions: undefined;
+  Notifications: undefined;
   Account: undefined;
 };
 
@@ -27,6 +30,7 @@ type AdminStackParamList = {
   AdminTabs: undefined;
   ManageCategories: undefined;
   ManageUsers: undefined;
+  ManageRestaurants: undefined;
   OrderTracking: { orderId: string; userRole?: 'customer' | 'shipper' | 'restaurant' };
 };
 
@@ -89,6 +93,9 @@ const AdminTabNavigator = () => (
           case 'Promotions':
             iconName = focused ? 'gift' : 'gift-outline';
             break;
+          case 'Notifications':
+            iconName = focused ? 'notifications' : 'notifications-outline';
+            break;
           case 'Account':
             iconName = focused ? 'person' : 'person-outline';
             break;
@@ -103,6 +110,7 @@ const AdminTabNavigator = () => (
     <Tab.Screen name="Menu" component={ManageFoodsScreen} options={{ tabBarLabel: 'Thực đơn' }} />
     <Tab.Screen name="Revenue" component={StatisticsScreen} options={{ tabBarLabel: 'Doanh thu' }} />
     <Tab.Screen name="Promotions" component={PromotionManagementScreen} options={{ tabBarLabel: 'Khuyến mãi' }} />
+    <Tab.Screen name="Notifications" component={RestaurantNotificationsScreen} options={{ tabBarLabel: 'Thông báo' }} />
     <Tab.Screen name="Account" component={RestaurantAccountScreen} options={{ tabBarLabel: 'Tài khoản' }} />
   </Tab.Navigator>
 );
@@ -132,6 +140,13 @@ const AdminNavigator = () => {
         }}
       />
       <Stack.Screen
+        name="ManageRestaurants"
+        component={ManageRestaurantsScreen}
+        options={{
+          title: 'Quản lý nhà hàng',
+        }}
+      />
+      <Stack.Screen
         name="OrderTracking"
         component={OrderTrackingScreen}
         options={{
@@ -155,5 +170,5 @@ const styles = StyleSheet.create({
   },
 });
 
-export type { AdminStackParamList, RestaurantTabParamList };
+export type { AdminStackParamList };
 export default AdminNavigator; 

@@ -1,0 +1,422 @@
+@startuml
+title Use Case Diagram - Food Order App
+
+!define RECTANGLE class
+left to right direction
+
+skinparam actorStyle awesome
+skinparam usecase {
+  BackgroundColor White
+  BorderColor #333333
+  ArrowColor #555555
+}
+
+'======================
+' Actors
+'======================
+actor "Khách hàng" as Customer
+actor "Nhà hàng" as Restaurant
+actor "Tài xế/Shipper" as Shipper
+actor "Quản trị viên" as Admin
+actor "Firebase/Auth" as Firebase
+actor "Cổng thanh toán" as PaymentGateway
+actor "Google Maps" as Maps
+actor "AI Services\n(Chatbot/Recommender)" as AIService
+
+'======================
+' Systems / Packages
+'======================
+rectangle "Ứng dụng di động" {
+  package "Customer App" {
+    usecase "Đăng ký tài khoản" as UC_Register
+    usecase "Đăng nhập" as UC_Login
+    usecase "Quản lý hồ sơ\n& cài đặt" as UC_Profile
+    usecase "Quản lý địa chỉ" as UC_Address
+    usecase "Quản lý thanh toán" as UC_Payment
+    usecase "Tìm kiếm & duyệt\nnhà hàng/món" as UC_Browse
+    usecase "Quản lý giỏ hàng" as UC_Cart
+    usecase "Đặt món & thanh toán" as UC_Order
+    usecase "Theo dõi đơn hàng" as UC_TrackOrder
+    usecase "Quản lý voucher" as UC_Voucher
+    usecase "Đánh giá nhà hàng\n/tài xế/món" as UC_Review
+    usecase "Nhận thông báo" as UC_Notifications
+    usecase "Liên hệ hỗ trợ\n(FAQ/Ticket)" as UC_Support
+    usecase "Chat với AI" as UC_Chatbot
+  }
+
+  package "Restaurant App" {
+    usecase "Đăng nhập nhà hàng" as UC_R_Login
+    usecase "Quản lý nhà hàng\n(thông tin, nhân sự)" as UC_R_Profile
+    usecase "Quản lý danh mục\n& món ăn" as UC_R_Menu
+    usecase "Quản lý đơn hàng" as UC_R_Orders
+    usecase "Quản lý khuyến mãi" as UC_R_Promo
+    usecase "Xem báo cáo doanh thu" as UC_R_Report
+    usecase "Giải quyết hỗ trợ" as UC_R_Support
+  }
+
+  package "Shipper App" {
+    usecase "Đăng nhập shipper" as UC_S_Login
+    usecase "Quản lý hồ sơ shipper" as UC_S_Profile
+    usecase "Nhận đơn giao hàng" as UC_S_Assign
+    usecase "Điều hướng giao hàng" as UC_S_Navigate
+    usecase "Cập nhật trạng thái giao" as UC_S_UpdateStatus
+    usecase "Quản lý thu nhập" as UC_S_Finance
+    usecase "Nhận thông báo giao" as UC_S_Notifications
+  }
+}
+
+rectangle "Admin Portal" {
+  usecase "Đăng nhập admin" as UC_A_Login
+  usecase "Quản lý người dùng" as UC_A_Users
+  usecase "Quản lý danh mục & đơn" as UC_A_Orders
+  usecase "Quản lý khuyến mãi" as UC_A_Promo
+  usecase "Xem báo cáo & phân tích" as UC_A_Report
+  usecase "Quản lý ticket hỗ trợ" as UC_A_Support
+  usecase "Cấu hình hệ thống" as UC_A_Config
+}
+
+'======================
+' Relationships: Customers
+'======================
+Customer --> UC_Register
+Customer --> UC_Login
+Customer --> UC_Profile
+Customer --> UC_Address
+Customer --> UC_Payment
+Customer --> UC_Browse
+Customer --> UC_Cart
+Customer --> UC_Order
+Customer --> UC_TrackOrder
+Customer --> UC_Voucher
+Customer --> UC_Review
+Customer --> UC_Notifications
+Customer --> UC_Support
+Customer --> UC_Chatbot
+
+UC_Order ..> UC_Cart : <<include>>
+UC_Order ..> UC_Payment : <<include>>
+UC_Order ..> UC_Address : <<include>>
+UC_Order ..> UC_Voucher : <<extend>>
+UC_TrackOrder ..> UC_Notifications : <<include>>
+UC_Chatbot ..> AIService : <<include>>
+
+'======================
+' Relationships: Restaurants
+'======================
+Restaurant --> UC_R_Login
+Restaurant --> UC_R_Profile
+Restaurant --> UC_R_Menu
+Restaurant --> UC_R_Orders
+Restaurant --> UC_R_Promo
+Restaurant --> UC_R_Report
+Restaurant --> UC_R_Support
+
+UC_R_Orders ..> UC_R_Menu : <<include>>
+UC_R_Promo ..> UC_R_Menu : <<extend>>
+UC_R_Report ..> UC_R_Orders : <<include>>
+
+'======================
+' Relationships: Shippers
+'======================
+Shipper --> UC_S_Login
+Shipper --> UC_S_Profile
+Shipper --> UC_S_Assign
+Shipper --> UC_S_Navigate
+Shipper --> UC_S_UpdateStatus
+Shipper --> UC_S_Finance
+Shipper --> UC_S_Notifications
+
+UC_S_Assign ..> UC_S_UpdateStatus : <<include>>
+UC_S_Navigate ..> Maps : <<include>>
+UC_S_UpdateStatus ..> UC_S_Notifications : <<extend>>
+
+'======================
+' Relationships: Admin
+'======================
+Admin --> UC_A_Login
+Admin --> UC_A_Users
+Admin --> UC_A_Orders
+Admin --> UC_A_Promo
+Admin --> UC_A_Report
+Admin --> UC_A_Support
+Admin --> UC_A_Config
+
+UC_A_Orders ..> UC_A_Users : <<include>>
+UC_A_Promo ..> UC_A_Users : <<extend>>
+UC_A_Report ..> UC_A_Orders : <<include>>
+UC_A_Support ..> UC_A_Users : <<include>>
+
+'======================
+' External integrations
+'======================
+UC_Register --> Firebase : <<include>>
+UC_Login --> Firebase : <<include>>
+UC_R_Login --> Firebase
+UC_S_Login --> Firebase
+UC_A_Login --> Firebase
+
+UC_Order --> PaymentGateway : <<include>>
+UC_Order --> Maps : <<extend>>\n"Ước tính phí giao""
+UC_TrackOrder --> Maps : <<include>>
+UC_TrackOrder --> Shipper : <<include>>
+UC_S_Navigate --> UC_TrackOrder : <<include>>
+UC_Order --> UC_R_Orders : <<include>>
+UC_R_Orders --> UC_S_Assign : <<include>>
+
+UC_Notifications --> Firebase : <<include>>
+UC_S_Notifications --> Firebase
+
+UC_Support --> UC_A_Support : <<include>>
+UC_R_Support --> UC_A_Support : <<include>>
+
+UC_Voucher --> UC_R_Promo : <<include>>
+UC_Voucher --> UC_A_Promo : <<extend>>
+
+@enduml
+
+@startuml CustomerUseCases
+title Use Case Diagram - Khách hàng
+
+skinparam actorStyle awesome
+
+actor "Khách hàng" as Customer
+actor "Firebase/Auth" as Firebase
+actor "Cổng thanh toán" as PaymentGateway
+actor "Google Maps" as Maps
+actor "AI Services" as AIService
+actor "Nhà hàng" as Restaurant
+actor "Tài xế/Shipper" as Shipper
+
+rectangle "Customer App" {
+  usecase "Đăng ký" as C_Register
+  usecase "Đăng nhập" as C_Login
+  usecase "Quản lý hồ sơ\n& cài đặt" as C_Profile
+  usecase "Quản lý địa chỉ" as C_Address
+  usecase "Quản lý thanh toán" as C_Payment
+  usecase "Tìm kiếm & duyệt\nnhà hàng/món" as C_Browse
+  usecase "Quản lý giỏ hàng" as C_Cart
+  usecase "Đặt món & thanh toán" as C_Order
+  usecase "Theo dõi đơn hàng" as C_Track
+  usecase "Quản lý voucher" as C_Voucher
+  usecase "Đánh giá & phản hồi" as C_Review
+  usecase "Trung tâm hỗ trợ" as C_Support
+  usecase "Chat với AI" as C_Chatbot
+  usecase "Nhận thông báo" as C_Notify
+}
+
+Customer --> C_Register
+Customer --> C_Login
+Customer --> C_Profile
+Customer --> C_Address
+Customer --> C_Payment
+Customer --> C_Browse
+Customer --> C_Cart
+Customer --> C_Order
+Customer --> C_Track
+Customer --> C_Voucher
+Customer --> C_Review
+Customer --> C_Support
+Customer --> C_Chatbot
+Customer --> C_Notify
+
+C_Register --> Firebase
+C_Login --> Firebase
+C_Order ..> C_Cart : <<include>>
+C_Order ..> C_Payment : <<include>>
+C_Order ..> C_Address : <<include>>
+C_Order ..> C_Voucher : <<extend>>
+C_Order --> Restaurant : <<include>>
+C_Track --> Shipper : <<include>>
+C_Track --> Maps : <<include>>
+C_Notify --> Firebase
+C_Chatbot --> AIService
+C_Support --> Restaurant : <<include>>
+C_Support --> Shipper : <<extend>>
+
+C_Order --> PaymentGateway : <<include>>
+C_Order --> Maps : <<extend>>\n"Ước tính phí"
+
+@enduml
+
+@startuml CustomerUseCases_Pure
+title Use Case Diagram - Khách hàng (Thuần chức năng)
+
+skinparam actorStyle awesome
+
+actor "Khách hàng" as Customer
+
+rectangle "Customer App" {
+  usecase "Đăng ký tài khoản" as CP_Register
+  usecase "Đăng nhập" as CP_Login
+  usecase "Quản lý hồ sơ &\n cài đặt" as CP_Profile
+  usecase "Quản lý địa chỉ" as CP_Address
+  usecase "Quản lý phương thức\n thanh toán" as CP_Payment
+  usecase "Tìm kiếm & duyệt\n nhà hàng/món" as CP_Browse
+  usecase "Quản lý giỏ hàng" as CP_Cart
+  usecase "Đặt món & thanh toán" as CP_Order
+  usecase "Theo dõi đơn hàng" as CP_Track
+  usecase "Quản lý voucher" as CP_Voucher
+  usecase "Đánh giá & phản hồi" as CP_Review
+  usecase "Thông báo & nhắc nhở" as CP_Notify
+  usecase "Trung tâm trợ giúp" as CP_Support
+  usecase "Trợ lý AI/Chatbot" as CP_Chatbot
+}
+
+Customer --> CP_Register
+Customer --> CP_Login
+Customer --> CP_Profile
+Customer --> CP_Address
+Customer --> CP_Payment
+Customer --> CP_Browse
+Customer --> CP_Cart
+Customer --> CP_Order
+Customer --> CP_Track
+Customer --> CP_Voucher
+Customer --> CP_Review
+Customer --> CP_Notify
+Customer --> CP_Support
+Customer --> CP_Chatbot
+
+CP_Order ..> CP_Cart : <<include>>
+CP_Order ..> CP_Payment : <<include>>
+CP_Order ..> CP_Address : <<include>>
+CP_Order ..> CP_Voucher : <<extend>>
+CP_Track ..> CP_Notify : <<include>>
+CP_Support ..> CP_Chatbot : <<extend>>
+
+@enduml
+
+@startuml RestaurantUseCases
+title Use Case Diagram - Nhà hàng
+
+skinparam actorStyle awesome
+
+actor "Nhà hàng" as Restaurant
+actor "Firebase/Auth" as Firebase
+actor "Khách hàng" as Customer
+actor "Tài xế/Shipper" as Shipper
+actor "Admin" as Admin
+
+rectangle "Restaurant App" {
+  usecase "Đăng nhập" as R_Login
+  usecase "Quản lý thông tin\nnhà hàng" as R_Profile
+  usecase "Quản lý nhân sự" as R_Staff
+  usecase "Quản lý danh mục" as R_Category
+  usecase "Quản lý món ăn" as R_Menu
+  usecase "Quản lý đơn hàng" as R_Orders
+  usecase "Gán tài xế" as R_Assign
+  usecase "Quản lý khuyến mãi" as R_Promo
+  usecase "Xem báo cáo & thống kê" as R_Report
+  usecase "Giải quyết hỗ trợ" as R_Support
+  usecase "Nhận thông báo" as R_Notify
+}
+
+Restaurant --> R_Login
+Restaurant --> R_Profile
+Restaurant --> R_Staff
+Restaurant --> R_Category
+Restaurant --> R_Menu
+Restaurant --> R_Orders
+Restaurant --> R_Assign
+Restaurant --> R_Promo
+Restaurant --> R_Report
+Restaurant --> R_Support
+Restaurant --> R_Notify
+
+R_Login --> Firebase
+R_Category ..> R_Menu : <<include>>
+R_Orders ..> R_Menu : <<include>>
+R_Orders --> Customer : <<include>>
+R_Assign --> Shipper : <<include>>
+R_Promo ..> R_Menu : <<extend>>
+R_Report ..> R_Orders : <<include>>
+R_Support --> Customer
+R_Support --> Admin
+R_Notify --> Firebase
+
+@enduml
+
+@startuml ShipperUseCases
+title Use Case Diagram - Tài xế/Shipper
+
+skinparam actorStyle awesome
+
+actor "Tài xế/Shipper" as Shipper
+actor "Firebase/Auth" as Firebase
+actor "Nhà hàng" as Restaurant
+actor "Khách hàng" as Customer
+actor "Google Maps" as Maps
+
+rectangle "Shipper App" {
+  usecase "Đăng nhập" as S_Login
+  usecase "Quản lý hồ sơ" as S_Profile
+  usecase "Nhận đơn giao" as S_Assign
+  usecase "Điều hướng giao hàng" as S_Navigate
+  usecase "Cập nhật trạng thái giao" as S_Update
+  usecase "Quản lý thu nhập" as S_Finance
+  usecase "Nhận thông báo" as S_Notify
+  usecase "Trợ giúp & hỗ trợ" as S_Support
+}
+
+Shipper --> S_Login
+Shipper --> S_Profile
+Shipper --> S_Assign
+Shipper --> S_Navigate
+Shipper --> S_Update
+Shipper --> S_Finance
+Shipper --> S_Notify
+Shipper --> S_Support
+
+S_Login --> Firebase
+S_Assign --> Restaurant
+S_Assign --> Customer
+S_Navigate --> Maps
+S_Update --> Customer
+S_Update --> Restaurant
+S_Update ..> S_Notify : <<extend>>
+S_Finance ..> S_Assign : <<include>>
+S_Notify --> Firebase
+S_Support --> Restaurant
+
+@enduml
+
+@startuml AdminUseCases
+title Use Case Diagram - Quản trị viên
+
+skinparam actorStyle awesome
+
+actor "Quản trị viên" as Admin
+actor "Firebase/Auth" as Firebase
+actor "Khách hàng" as Customer
+actor "Nhà hàng" as Restaurant
+actor "Tài xế/Shipper" as Shipper
+
+rectangle "Admin Portal" {
+  usecase "Đăng nhập" as A_Login
+  usecase "Quản lý người dùng" as A_Users
+  usecase "Quản lý danh mục & đơn" as A_Orders
+  usecase "Quản lý khuyến mãi" as A_Promo
+  usecase "Báo cáo & phân tích" as A_Report
+  usecase "Quản lý ticket hỗ trợ" as A_Support
+  usecase "Cấu hình hệ thống" as A_Config
+}
+
+Admin --> A_Login
+Admin --> A_Users
+Admin --> A_Orders
+Admin --> A_Promo
+Admin --> A_Report
+Admin --> A_Support
+Admin --> A_Config
+
+A_Login --> Firebase
+A_Users --> Customer
+A_Users --> Restaurant
+A_Users --> Shipper
+A_Orders ..> A_Users : <<include>>
+A_Promo ..> A_Users : <<include>>
+A_Report ..> A_Orders : <<include>>
+A_Support ..> A_Users : <<include>>
+A_Config ..> A_Report : <<extend>>
+
+@enduml

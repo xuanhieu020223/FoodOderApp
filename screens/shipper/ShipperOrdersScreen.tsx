@@ -44,6 +44,10 @@ const ShipperOrdersScreen = () => {
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'pending' | 'my'>('all');
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [detailsModalVisible, setDetailsModalVisible] = useState(false);
+  const [failureModalVisible, setFailureModalVisible] = useState(false);
+  const [failureReason, setFailureReason] = useState('');
+  const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
+  const [suggestedOrders, setSuggestedOrders] = useState<any[]>([]);
   const user = auth.currentUser;
 
   useEffect(() => {
@@ -74,7 +78,39 @@ const ShipperOrdersScreen = () => {
 
   useEffect(() => {
     filterOrders();
+    calculateSuggestions();
   }, [orders, searchQuery, selectedFilter]);
+
+  const calculateSuggestions = () => {
+    const pending = orders.filter(o => !o.shipperId || o.status === 'shipping');
+    
+    // Tính điểm gợi ý dựa trên:
+    // - Giá trị đơn hàng (30%)
+    // - Khoảng cách ước tính (40%)
+    // - Thời gian chờ (30%)
+    const suggestions = pending.map(order => {
+      const amount = order.totalAmount || 0;
+      const createdAt = order.createdAt?.toDate ? order.createdAt.toDate() : new Date();
+      const waitTime = (Date.now() - createdAt.getTime()) / (1000 * 60); // phút
+      
+      // Điểm số (0-100)
+      const amountScore = Math.min((amount / 500000) * 30, 30); // Tối đa 30 điểm
+      const waitScore = Math.min((waitTime / 30) * 30, 30); // Tối đa 30 điểm
+      const distanceScore = 40; // Giả định khoảng cách hợp lý
+      
+      const totalScore = amountScore + waitScore + distanceScore;
+      
+      return {
+        ...order,
+        suggestionScore: totalScore,
+        suggestionReason: amount > 200000 ? 'Đơn giá trị cao' : waitTime > 15 ? 'Đã chờ lâu' : 'Gần vị trí',
+      };
+    });
+    
+    // Sắp xếp theo điểm số
+    suggestions.sort((a, b) => b.suggestionScore - a.suggestionScore);
+    setSuggestedOrders(suggestions.slice(0, 3));
+  };
 
   const filterOrders = () => {
     let filtered = [...orders];
@@ -145,19 +181,58 @@ const ShipperOrdersScreen = () => {
       Alert.alert('Thành công', 'Bạn đã nhận đơn!');
     } catch (e) {
       console.error('Error accepting order:', e);
-      Alert.alert('Lỗi', 'Không thể nhận đơn.');
     }
   };
 
   const updateStatus = async (orderId: string, nextStatus: string) => {
     try {
-      await updateDoc(doc(db, 'orders', orderId), {
-        status: nextStatus,
-        [`${nextStatus}At`]: new Date(),
-      });
-      Alert.alert('Thành công', 'Đã cập nhật trạng thái đơn hàng');
+      if (nextStatus === 'delivered') {
+        // Nếu giao thành công, cập nhật bình thường
+        await updateDoc(doc(db, 'orders', orderId), {
+          status: nextStatus,
+          [`${nextStatus}At`]: new Date(),
+        });
+        Alert.alert('Thành công', 'Đã cập nhật trạng thái đơn hàng');
+      } else {
+        await updateDoc(doc(db, 'orders', orderId), {
+          status: nextStatus,
+          [`${nextStatus}At`]: new Date(),
+        });
+        Alert.alert('Thành công', 'Đã cập nhật trạng thái đơn hàng');
+      }
     } catch (e) {
-      Alert.alert('Lỗi', 'Không thể cập nhật trạng thái.');
+      console.error('Error updating order status:', e);
+    }
+  };
+
+  const handleDeliveryFailure = (orderId: string) => {
+    setCurrentOrderId(orderId);
+    setFailureReason('');
+    setFailureModalVisible(true);
+  };
+
+  const submitFailureReason = async () => {
+    if (!failureReason.trim()) {
+      Alert.alert('Lỗi', 'Vui lòng nhập lý do giao hàng thất bại');
+      return;
+    }
+
+    try {
+      if (!currentOrderId) return;
+      
+      await updateDoc(doc(db, 'orders', currentOrderId), {
+        status: 'failed',
+        failureReason: failureReason.trim(),
+        failedAt: new Date(),
+        failedBy: user?.uid,
+      });
+      
+      Alert.alert('Thành công', 'Đã ghi nhận lý do giao hàng thất bại');
+      setFailureModalVisible(false);
+      setFailureReason('');
+      setCurrentOrderId(null);
+    } catch (e) {
+      console.error('Error submitting failure reason:', e);
     }
   };
 
@@ -186,7 +261,7 @@ const ShipperOrdersScreen = () => {
       );
     }
     
-    if (item.shipperId === user?.uid && item.status !== 'delivered') {
+    if (item.shipperId === user?.uid && item.status !== 'delivered' && item.status !== 'failed') {
       const nextStatus = getNextStatus(item.status);
       if (nextStatus) {
         let label = '';
@@ -205,13 +280,24 @@ const ShipperOrdersScreen = () => {
           icon = 'checkmark-done-circle';
         }
         return (
-          <TouchableOpacity 
-            style={[styles.actionButton, styles.statusButton]} 
-            onPress={() => updateStatus(item.id, nextStatus)}
-          >
-            <Ionicons name={icon as any} size={20} color="#fff" />
-            <Text style={styles.actionButtonText}>{label}</Text>
-          </TouchableOpacity>
+          <View style={styles.actionGroup}>
+            <TouchableOpacity 
+              style={[styles.actionButton, styles.statusButton]} 
+              onPress={() => updateStatus(item.id, nextStatus)}
+            >
+              <Ionicons name={icon as any} size={20} color="#fff" />
+              <Text style={styles.actionButtonText}>{label}</Text>
+            </TouchableOpacity>
+            {(item.status === 'delivering' || item.status === 'picking') && (
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.failureButton]} 
+                onPress={() => handleDeliveryFailure(item.id)}
+              >
+                <Ionicons name="close-circle" size={20} color="#fff" />
+                <Text style={styles.actionButtonText}>Giao thất bại</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         );
       }
     }
@@ -382,6 +468,33 @@ const ShipperOrdersScreen = () => {
             <Text style={styles.headerSubtitle}>Quản lý đơn giao hàng</Text>
           </View>
         </View>
+
+        {/* Suggested Orders */}
+        {suggestedOrders.length > 0 && selectedFilter === 'pending' && (
+          <View style={styles.suggestionsContainer}>
+            <View style={styles.suggestionsHeader}>
+              <MaterialIcons name="lightbulb" size={18} color="#FF9800" />
+              <Text style={styles.suggestionsTitle}>Gợi ý đơn hàng</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.suggestionsScroll}>
+              {suggestedOrders.map((order) => (
+                <TouchableOpacity
+                  key={order.id}
+                  style={styles.suggestionCard}
+                  onPress={() => openOrderDetails(order)}
+                >
+                  <View style={styles.suggestionBadge}>
+                    <MaterialIcons name="star" size={14} color="#FF9800" />
+                    <Text style={styles.suggestionScore}>{Math.round(order.suggestionScore)}</Text>
+                  </View>
+                  <Text style={styles.suggestionOrderId}>#{order.id.slice(-6).toUpperCase()}</Text>
+                  <Text style={styles.suggestionAmount}>{order.totalAmount?.toLocaleString('vi-VN')} đ</Text>
+                  <Text style={styles.suggestionReason}>{order.suggestionReason}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Search Bar */}
         <View style={styles.searchContainer}>
@@ -571,6 +684,53 @@ const ShipperOrdersScreen = () => {
                 onPress={() => setDetailsModalVisible(false)}
               >
                 <Text style={styles.modalButtonText}>Đóng</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Failure Reason Modal */}
+      <Modal
+        visible={failureModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setFailureModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Lý do giao hàng thất bại</Text>
+              <TouchableOpacity onPress={() => setFailureModalVisible(false)}>
+                <MaterialIcons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalLabel}>Vui lòng mô tả lý do giao hàng thất bại:</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={failureReason}
+                onChangeText={setFailureReason}
+                placeholder="Ví dụ: Khách hàng không liên lạc được, địa chỉ sai, khách hủy đơn..."
+                placeholderTextColor="#999"
+                multiline
+                numberOfLines={5}
+              />
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setFailureModalVisible(false)}
+              >
+                <Text style={styles.cancelButtonText}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.saveButton]}
+                onPress={submitFailureReason}
+              >
+                <Text style={styles.saveButtonText}>Xác nhận</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -817,19 +977,26 @@ const styles = StyleSheet.create({
     color: '#4A90E2',
     fontWeight: '600',
   },
+  actionGroup: {
+    flexDirection: 'row',
+    gap: 8,
+    marginLeft: 'auto',
+  },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 8,
-    marginLeft: 'auto',
   },
   acceptButton: {
     backgroundColor: '#ee4d2d',
   },
   statusButton: {
     backgroundColor: '#2196F3',
+  },
+  failureButton: {
+    backgroundColor: '#F44336',
   },
   actionButtonText: {
     color: '#fff',
@@ -1000,6 +1167,104 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  suggestionsContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  suggestionsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 6,
+  },
+  suggestionsTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#FF9800',
+  },
+  suggestionsScroll: {
+    marginHorizontal: -16,
+    paddingHorizontal: 16,
+  },
+  suggestionCard: {
+    backgroundColor: '#FFF9E6',
+    borderRadius: 12,
+    padding: 12,
+    marginRight: 12,
+    width: 140,
+    borderWidth: 1,
+    borderColor: '#FFE082',
+  },
+  suggestionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: '#FF9800',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  suggestionScore: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginLeft: 4,
+  },
+  suggestionOrderId: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 4,
+  },
+  suggestionAmount: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    marginBottom: 4,
+  },
+  suggestionReason: {
+    fontSize: 11,
+    color: '#666',
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    backgroundColor: '#fff',
+    color: '#333',
+    marginTop: 8,
+  },
+  textArea: {
+    height: 120,
+    textAlignVertical: 'top',
+  },
+  modalLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 8,
+    fontWeight: '600',
+  },
+  cancelButton: {
+    backgroundColor: '#F5F5F5',
+  },
+  cancelButtonText: {
+    color: '#666',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  saveButton: {
+    backgroundColor: '#ee4d2d',
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
 });
 

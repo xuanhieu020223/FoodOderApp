@@ -62,3 +62,52 @@ export interface SupportTicket {
   channel: 'app' | 'phone' | 'email';
 }
 
+export interface Restaurant {
+  id: string;
+  name: string;
+  ownerName: string;
+  email: string;
+  phone: string;
+  address: string;
+  city: string;
+  status: 'pending' | 'approved' | 'rejected' | 'suspended' | 'active';
+  registrationStatus: 'pending' | 'approved' | 'rejected';
+  businessLicense?: string;
+  businessLicenseImage?: string;
+  contractStatus?: 'pending' | 'signed' | 'expired';
+  commissionRate?: number;
+  createdAt: string;
+  approvedAt?: string;
+  rejectedReason?: string;
+  totalOrders?: number;
+  totalRevenue?: number;
+  rating?: number;
+  menuVerified?: boolean;
+  documentsVerified?: boolean;
+}
+
+export interface Driver {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  licenseNumber?: string;
+  licenseImage?: string;
+  vehicleType?: string;
+  vehiclePlate?: string;
+  status: 'pending' | 'approved' | 'rejected' | 'suspended' | 'active';
+  registrationStatus: 'pending' | 'approved' | 'rejected';
+  onlineStatus: 'online' | 'offline';
+  licenseVerified?: boolean;
+  createdAt: string;
+  approvedAt?: string;
+  rejectedReason?: string;
+  totalDeliveries?: number;
+  totalEarnings?: number;
+  rating?: number;
+  currentLocation?: {
+    lat: number;
+    lng: number;
+  };
+}
+

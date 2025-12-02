@@ -13,8 +13,9 @@ import {
   ScrollView,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { collection, query, getDocs, doc, updateDoc, where, orderBy } from 'firebase/firestore';
+import { collection, query, getDocs, doc, updateDoc, deleteDoc, where, orderBy } from 'firebase/firestore';
 import { db } from '../../config/Firebase';
+import { Card, Button, Tag, Badge, Empty } from '../../components/admin/AntDesignComponents';
 
 interface User {
   id: string;
@@ -49,7 +50,15 @@ const ManageUsersScreen = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
+  const [editModalVisible, setEditModalVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [editingUser, setEditingUser] = useState<Partial<User>>({
+    name: '',
+    email: '',
+    phone: '',
+    role: 'user',
+    status: 'active',
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'user' | 'admin' | 'restaurant' | 'driver'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'blocked' | 'pending'>('all');
@@ -204,9 +213,67 @@ const ManageUsersScreen = () => {
     }
   };
 
+  const handleEditUser = async (userId: string, updates: Partial<User>) => {
+    try {
+      await updateDoc(doc(db, 'users', userId), updates);
+      
+      setUsers(users.map(user =>
+        user.id === userId ? { ...user, ...updates } : user
+      ));
+      
+      Alert.alert('Thành công', 'Đã cập nhật thông tin người dùng');
+      setEditModalVisible(false);
+      setSelectedUser(null);
+    } catch (error) {
+      console.error('Error updating user:', error);
+      Alert.alert('Lỗi', 'Không thể cập nhật thông tin người dùng');
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    Alert.alert(
+      'Xác nhận xóa',
+      'Bạn có chắc chắn muốn xóa người dùng này? Hành động này không thể hoàn tác.',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Xóa',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteDoc(doc(db, 'users', userId));
+              setUsers(users.filter(user => user.id !== userId));
+              setModalVisible(false);
+              Alert.alert('Thành công', 'Đã xóa người dùng');
+            } catch (error) {
+              console.error('Error deleting user:', error);
+              Alert.alert('Lỗi', 'Không thể xóa người dùng');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleViewUserDetails = (user: User) => {
     setSelectedUser(user);
     setModalVisible(true);
+  };
+
+  const handleOpenEditModal = (user: User) => {
+    setSelectedUser(user);
+    setEditingUser({
+      name: user.name || '',
+      email: user.email || '',
+      phone: user.phone || '',
+      role: user.role || 'user',
+      status: user.status || 'active',
+    });
+    setModalVisible(false);
+    // Delay để đảm bảo modal chi tiết đóng trước khi mở modal chỉnh sửa
+    setTimeout(() => {
+      setEditModalVisible(true);
+    }, 300);
   };
 
   const renderUserItem = ({ item }: { item: User }) => {
@@ -397,29 +464,52 @@ const ManageUsersScreen = () => {
                 </View>
               </View>
 
+              <View style={styles.modalActions}>
+                <Button
+                  type="default"
+                  icon="edit"
+                  onPress={() => handleOpenEditModal(selectedUser)}
+                  style={styles.modalActionButton}
+                >
+                  Chỉnh sửa
+                </Button>
               {selectedUser.status === 'active' ? (
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.blockButton]}
+                  <Button
+                    type="primary"
+                    icon="block"
                   onPress={() => {
                     setModalVisible(false);
                     handleBlockUser(selectedUser.id);
                   }}
+                    style={[styles.modalActionButton, { backgroundColor: '#f44336' }]}
                 >
-                  <MaterialIcons name="block" size={20} color="#fff" />
-                  <Text style={styles.buttonText}>Chặn người dùng</Text>
-                </TouchableOpacity>
+                    Chặn người dùng
+                  </Button>
               ) : (
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.unblockButton]}
+                  <Button
+                    type="primary"
+                    icon="check-circle"
                   onPress={() => {
                     setModalVisible(false);
                     handleUnblockUser(selectedUser.id);
                   }}
+                    style={[styles.modalActionButton, { backgroundColor: '#4CAF50' }]}
+                  >
+                    Bỏ chặn
+                  </Button>
+                )}
+                <Button
+                  type="ghost"
+                  icon="delete"
+                  onPress={() => {
+                    setModalVisible(false);
+                    handleDeleteUser(selectedUser.id);
+                  }}
+                  style={[styles.modalActionButton, { borderColor: '#f44336' }]}
                 >
-                  <MaterialIcons name="check-circle" size={20} color="#fff" />
-                  <Text style={styles.buttonText}>Bỏ chặn</Text>
-                </TouchableOpacity>
-              )}
+                  <Text style={{ color: '#f44336' }}>Xóa tài khoản</Text>
+                </Button>
+              </View>
             </View>
           </View>
         </View>
@@ -650,8 +740,142 @@ const ManageUsersScreen = () => {
       />
 
       <UserDetailsModal />
+      <EditUserModal />
     </View>
   );
+
+  const EditUserModal = () => {
+    if (!selectedUser) return null;
+
+    return (
+      <Modal
+        visible={editModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setEditModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Chỉnh sửa người dùng</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setEditModalVisible(false)}
+              >
+                <MaterialIcons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              <View style={styles.editSection}>
+                <Text style={styles.editLabel}>Tên người dùng</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editingUser.name || ''}
+                  onChangeText={(text) => setEditingUser({ ...editingUser, name: text })}
+                  placeholder="Nhập tên người dùng"
+                />
+              </View>
+
+              <View style={styles.editSection}>
+                <Text style={styles.editLabel}>Email</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editingUser.email || ''}
+                  onChangeText={(text) => setEditingUser({ ...editingUser, email: text })}
+                  placeholder="Nhập email"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+              </View>
+
+              <View style={styles.editSection}>
+                <Text style={styles.editLabel}>Số điện thoại</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editingUser.phone || ''}
+                  onChangeText={(text) => setEditingUser({ ...editingUser, phone: text })}
+                  placeholder="Nhập số điện thoại"
+                  keyboardType="phone-pad"
+                />
+              </View>
+
+              <View style={styles.editSection}>
+                <Text style={styles.editLabel}>Vai trò</Text>
+                <View style={styles.roleSelector}>
+                  {(['user', 'restaurant', 'driver', 'admin'] as const).map((role) => (
+                    <TouchableOpacity
+                      key={role}
+                      style={[
+                        styles.roleOption,
+                        editingUser.role === role && styles.roleOptionActive,
+                      ]}
+                      onPress={() => setEditingUser({ ...editingUser, role })}
+                    >
+                      <Text
+                        style={[
+                          styles.roleOptionText,
+                          editingUser.role === role && styles.roleOptionTextActive,
+                        ]}
+                      >
+                        {ROLE_META[role].label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.editSection}>
+                <Text style={styles.editLabel}>Trạng thái</Text>
+                <View style={styles.statusSelector}>
+                  {(['active', 'blocked', 'pending'] as const).map((status) => (
+                    <TouchableOpacity
+                      key={status}
+                      style={[
+                        styles.statusOption,
+                        editingUser.status === status && styles.statusOptionActive,
+                      ]}
+                      onPress={() => setEditingUser({ ...editingUser, status })}
+                    >
+                      <Text
+                        style={[
+                          styles.statusOptionText,
+                          editingUser.status === status && styles.statusOptionTextActive,
+                        ]}
+                      >
+                        {status === 'active' ? 'Hoạt động' : status === 'blocked' ? 'Đã chặn' : 'Chờ duyệt'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.modalActions}>
+                <Button
+                  type="default"
+                  onPress={() => setEditModalVisible(false)}
+                  style={styles.modalActionButton}
+                >
+                  Hủy
+                </Button>
+                <Button
+                  type="primary"
+                  onPress={() => {
+                    if (selectedUser) {
+                      handleEditUser(selectedUser.id, editingUser);
+                    }
+                  }}
+                  style={styles.modalActionButton}
+                >
+                  Lưu thay đổi
+                </Button>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
 };
 
 const styles = StyleSheet.create({
@@ -983,6 +1207,82 @@ const styles = StyleSheet.create({
     marginTop: 10,
     color: '#666',
     fontSize: 16,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 20,
+  },
+  modalActionButton: {
+    flex: 1,
+  },
+  editSection: {
+    marginBottom: 20,
+  },
+  editLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#262626',
+    marginBottom: 8,
+  },
+  editInput: {
+    borderWidth: 1,
+    borderColor: '#d9d9d9',
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    backgroundColor: '#fff',
+  },
+  roleSelector: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  roleOption: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#d9d9d9',
+    backgroundColor: '#fff',
+  },
+  roleOptionActive: {
+    borderColor: '#1890ff',
+    backgroundColor: '#e6f7ff',
+  },
+  roleOptionText: {
+    fontSize: 14,
+    color: '#262626',
+  },
+  roleOptionTextActive: {
+    color: '#1890ff',
+    fontWeight: '600',
+  },
+  statusSelector: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  statusOption: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#d9d9d9',
+    backgroundColor: '#fff',
+  },
+  statusOptionActive: {
+    borderColor: '#1890ff',
+    backgroundColor: '#e6f7ff',
+  },
+  statusOptionText: {
+    fontSize: 14,
+    color: '#262626',
+  },
+  statusOptionTextActive: {
+    color: '#1890ff',
+    fontWeight: '600',
   },
 });
 

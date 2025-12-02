@@ -1,0 +1,44 @@
+@startuml
+title Use Case Diagram - Nhà hàng (Restaurant)
+
+left to right direction
+skinparam actorStyle awesome
+
+actor "Nhà hàng" as Restaurant
+
+rectangle "Restaurant App" {
+  usecase "Đăng nhập" as R_Login
+  usecase "Quản lý thông tin\nnhà hàng" as R_Profile
+  usecase "Quản lý nhân sự" as R_Staff
+  usecase "Quản lý danh mục" as R_Category
+  usecase "Quản lý món ăn" as R_Menu
+  usecase "Quản lý đơn hàng" as R_Orders
+  usecase "Gán tài xế giao" as R_Assign
+  usecase "Quản lý khuyến mãi" as R_Promo
+  usecase "Xem báo cáo & thống kê" as R_Report
+  usecase "Giải quyết hỗ trợ" as R_Support
+  usecase "Nhận thông báo" as R_Notify
+}
+
+Restaurant --> R_Login
+Restaurant --> R_Profile
+Restaurant --> R_Staff
+Restaurant --> R_Category
+Restaurant --> R_Menu
+Restaurant --> R_Orders
+Restaurant --> R_Assign
+Restaurant --> R_Promo
+Restaurant --> R_Report
+Restaurant --> R_Support
+Restaurant --> R_Notify
+
+R_Category ..> R_Menu : <<include>>
+R_Orders ..> R_Menu : <<include>>
+R_Orders ..> R_Assign : <<include>>
+R_Promo ..> R_Menu : <<extend>>
+R_Report ..> R_Orders : <<include>>
+R_Support ..> R_Orders : <<extend>>
+R_Notify ..> R_Orders : <<include>>
+
+@enduml
+

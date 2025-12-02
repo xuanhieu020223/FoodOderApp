@@ -1,0 +1,36 @@
+@startuml
+title Use Case Diagram - Tài xế/Shipper
+
+left to right direction
+skinparam actorStyle awesome
+
+actor "Tài xế/Shipper" as Shipper
+
+rectangle "Shipper App" {
+  usecase "Đăng nhập" as S_Login
+  usecase "Quản lý hồ sơ" as S_Profile
+  usecase "Nhận đơn giao" as S_Assign
+  usecase "Điều hướng giao hàng" as S_Navigate
+  usecase "Cập nhật trạng thái" as S_Update
+  usecase "Quản lý thu nhập" as S_Finance
+  usecase "Nhận thông báo" as S_Notify
+  usecase "Trợ giúp & hỗ trợ" as S_Support
+}
+
+Shipper --> S_Login
+Shipper --> S_Profile
+Shipper --> S_Assign
+Shipper --> S_Navigate
+Shipper --> S_Update
+Shipper --> S_Finance
+Shipper --> S_Notify
+Shipper --> S_Support
+
+S_Assign ..> S_Navigate : <<include>>
+S_Assign ..> S_Update : <<include>>
+S_Update ..> S_Notify : <<extend>>
+S_Finance ..> S_Assign : <<include>>
+S_Support ..> S_Notify : <<include>>
+
+@enduml
+
