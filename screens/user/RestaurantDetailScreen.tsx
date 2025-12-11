@@ -99,7 +99,13 @@ const RestaurantDetailScreen = ({ route }: any) => {
       >
         {/* Restaurant Image */}
         <Image
-          source={{ uri: restaurant.image || PLACEHOLDER_RESTAURANT_IMAGE }}
+          source={{
+            uri:
+              restaurant.logoUrl ||
+              restaurant.logo ||
+              restaurant.image ||
+              PLACEHOLDER_RESTAURANT_IMAGE,
+          }}
           style={styles.image}
           resizeMode="cover"
         />

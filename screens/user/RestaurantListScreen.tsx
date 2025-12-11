@@ -111,9 +111,15 @@ const RestaurantListScreen = () => {
             style={styles.card}
             activeOpacity={0.85}
             onPress={() => navigation.navigate('RestaurantDetail', { restaurantId: item.id })}
-          >
+            >
             <Image
-              source={{ uri: item.image || 'https://cdn-icons-png.flaticon.com/512/3595/3595455.png' }}
+              source={{
+                uri:
+                  item.logoUrl ||
+                  item.logo ||
+                  item.image ||
+                  'https://cdn-icons-png.flaticon.com/512/3595/3595455.png',
+              }}
               style={styles.image}
               resizeMode="cover"
             />

@@ -34,8 +34,7 @@ type CartItem = {
   createdAt: Date;
 };
 
-const DELIVERY_FEE = 15000;
-const MIN_ORDER_FOR_FREE_DELIVERY = 100000;
+const MIN_ORDER_FOR_FREE_DELIVERY = 150000; // Cập nhật để khớp với config trong deliveryFee.ts
 
 const CartScreen = () => {
   const navigation = useNavigation<NavigationProp>();
@@ -152,13 +151,10 @@ const CartScreen = () => {
     return calculateSelectedTotal();
   };
 
-  const calculateDeliveryFee = () => {
-    const subtotal = calculateSubtotal();
-    return subtotal >= MIN_ORDER_FOR_FREE_DELIVERY ? 0 : DELIVERY_FEE;
-  };
-
   const calculateTotal = () => {
-    return calculateSubtotal() + calculateDeliveryFee();
+    // Trong giỏ hàng, chỉ hiển thị tạm tính
+    // Phí vận chuyển sẽ được tính ở CheckoutScreen khi có địa chỉ
+    return calculateSubtotal();
   };
 
   const handleCheckout = () => {
@@ -181,36 +177,68 @@ const CartScreen = () => {
             isSelected && styles.checkboxSelected
           ]}
           onPress={() => handleSelectItem(item.id)}
+          activeOpacity={0.7}
         >
           {isSelected && (
-            <Ionicons name="checkmark" size={16} color="#fff" />
+            <Ionicons name="checkmark" size={14} color="#fff" />
           )}
         </TouchableOpacity>
 
         <Image source={{ uri: item.imageUrl }} style={styles.itemImage} />
         
         <View style={styles.itemInfo}>
-          <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+          <View style={styles.itemHeader}>
+            <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
+            <TouchableOpacity 
+              style={styles.removeButton}
+              onPress={() => {
+                Alert.alert(
+                  'Xác nhận',
+                  'Bạn có chắc muốn xóa món này?',
+                  [
+                    { text: 'Hủy', style: 'cancel' },
+                    { text: 'Xóa', onPress: () => removeItem(item.id), style: 'destructive' },
+                  ]
+                );
+              }}
+              disabled={updating}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="close-circle" size={22} color="#999" />
+            </TouchableOpacity>
+          </View>
+          
           {item.restaurantName && (
             <View style={styles.restaurantRow}>
-              <Ionicons name="restaurant-outline" size={12} color="#999" />
+              <Ionicons name="restaurant-outline" size={14} color="#999" />
               <Text style={styles.restaurantName} numberOfLines={1}>
                 {item.restaurantName}
               </Text>
             </View>
           )}
-          <Text style={styles.itemPrice}>
-            {item.price.toLocaleString('vi-VN')} đ
-          </Text>
           
-          <View style={styles.quantityRow}>
+          <View style={styles.itemBottom}>
+            <View style={styles.priceContainer}>
+              <Text style={styles.itemPriceUnit}>
+                {item.price.toLocaleString('vi-VN')} đ
+              </Text>
+              <Text style={styles.itemTotal}>
+                {itemTotal.toLocaleString('vi-VN')} đ
+              </Text>
+            </View>
+            
             <View style={styles.quantityControls}>
               <TouchableOpacity 
                 style={styles.quantityButton}
                 onPress={() => updateQuantity(item.id, item.quantity - 1)}
-                disabled={updating}
+                disabled={updating || item.quantity <= 1}
+                activeOpacity={0.7}
               >
-                <Ionicons name="remove" size={18} color="#ee4d2d" />
+                <Ionicons 
+                  name="remove" 
+                  size={18} 
+                  color={item.quantity <= 1 ? "#ccc" : "#ee4d2d"} 
+                />
               </TouchableOpacity>
               
               <Text style={styles.quantityText}>{item.quantity}</Text>
@@ -219,32 +247,13 @@ const CartScreen = () => {
                 style={styles.quantityButton}
                 onPress={() => updateQuantity(item.id, item.quantity + 1)}
                 disabled={updating}
+                activeOpacity={0.7}
               >
                 <Ionicons name="add" size={18} color="#ee4d2d" />
               </TouchableOpacity>
             </View>
-            <Text style={styles.itemTotal}>
-              {itemTotal.toLocaleString('vi-VN')} đ
-            </Text>
           </View>
         </View>
-        
-        <TouchableOpacity 
-          style={styles.removeButton}
-          onPress={() => {
-            Alert.alert(
-              'Xác nhận',
-              'Bạn có chắc muốn xóa món này?',
-              [
-                { text: 'Hủy', style: 'cancel' },
-                { text: 'Xóa', onPress: () => removeItem(item.id) },
-              ]
-            );
-          }}
-          disabled={updating}
-        >
-          <Ionicons name="trash-outline" size={20} color="#F44336" />
-        </TouchableOpacity>
       </View>
     );
   };
@@ -284,7 +293,7 @@ const CartScreen = () => {
 
   if (cartItems.length === 0) {
     return (
-      <CustomerScreenWrapper gradientHeight={240}>
+      <CustomerScreenWrapper gradientHeight={180}>
         <View style={styles.emptyContainer}>
           <Ionicons name="cart-outline" size={80} color="#ddd" />
           <Text style={styles.emptyTitle}>Giỏ hàng trống</Text>
@@ -305,30 +314,36 @@ const CartScreen = () => {
   }
 
   const subtotal = calculateSubtotal();
-  const deliveryFee = calculateDeliveryFee();
   const total = calculateTotal();
   const isFreeDelivery = subtotal >= MIN_ORDER_FOR_FREE_DELIVERY;
   const remainingForFreeDelivery = MIN_ORDER_FOR_FREE_DELIVERY - subtotal;
 
   return (
-    <CustomerScreenWrapper gradientHeight={250}>
+    <CustomerScreenWrapper gradientHeight={120}>
       <>
         <View style={styles.container}>
           <View style={styles.header}>
-            <View style={styles.headerContent}>
-              <MaterialIcons name="shopping-cart" size={24} color="#ee4d2d" />
+            <View style={styles.headerTop}>
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => navigation.goBack()}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
+              </TouchableOpacity>
               <Text style={styles.headerTitle}>Giỏ hàng ({cartItems.length})</Text>
             </View>
             <TouchableOpacity
               style={styles.selectAllContainer}
               onPress={handleSelectAll}
+              activeOpacity={0.7}
             >
               <View style={[
                 styles.checkbox,
                 selectedItems.length === cartItems.length && styles.checkboxSelected
               ]}>
                 {selectedItems.length === cartItems.length && (
-                  <Ionicons name="checkmark" size={16} color="#fff" />
+                  <Ionicons name="checkmark" size={14} color="#fff" />
                 )}
               </View>
               <Text style={styles.selectAllText}>
@@ -373,20 +388,23 @@ const CartScreen = () => {
               </View>
               <View style={styles.priceRow}>
                 <Text style={styles.priceLabel}>Phí vận chuyển:</Text>
-                <Text style={[
-                  styles.priceValue,
-                  deliveryFee === 0 && styles.freeDeliveryPrice
-                ]}>
-                  {deliveryFee === 0 ? 'Miễn phí' : `${deliveryFee.toLocaleString('vi-VN')} đ`}
-                </Text>
+                <View style={styles.deliveryFeeInfo}>
+                  <Ionicons name="information-circle-outline" size={16} color="#999" />
+                  <Text style={styles.deliveryFeeText}>
+                    Sẽ được tính khi nhập địa chỉ
+                  </Text>
+                </View>
               </View>
               <View style={styles.divider} />
               <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>Tổng cộng:</Text>
+                <Text style={styles.totalLabel}>Tạm tính:</Text>
                 <Text style={styles.totalPrice}>
                   {total.toLocaleString('vi-VN')} đ
                 </Text>
               </View>
+              <Text style={styles.noteText}>
+                * Phí vận chuyển sẽ được tính dựa trên khoảng cách từ nhà hàng đến địa chỉ giao hàng
+              </Text>
             </View>
             
             <TouchableOpacity 
@@ -396,16 +414,21 @@ const CartScreen = () => {
               ]}
               onPress={handleCheckout}
               disabled={selectedItems.length === 0}
+              activeOpacity={0.8}
             >
               <View style={styles.checkoutButtonContent}>
-                <Text style={styles.checkoutButtonText}>
-                  Thanh toán ({selectedItems.length})
-                </Text>
-                <Text style={styles.checkoutButtonSubtext}>
-                  {total.toLocaleString('vi-VN')} đ
-                </Text>
+                <View style={styles.checkoutButtonLeft}>
+                  <Text style={styles.checkoutButtonText}>
+                    Thanh toán
+                  </Text>
+                  <Text style={styles.checkoutButtonSubtext}>
+                    {selectedItems.length} món • {total.toLocaleString('vi-VN')} đ
+                  </Text>
+                </View>
+                <View style={styles.checkoutButtonRight}>
+                  <Ionicons name="arrow-forward" size={22} color="#fff" />
+                </View>
               </View>
-              <Ionicons name="arrow-forward" size={20} color="#fff" />
             </TouchableOpacity>
           </View>
         </View>
@@ -482,186 +505,249 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#fff',
-    padding: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#F0F0F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  headerContent: {
+  headerTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
-    gap: 8,
+    marginBottom: 16,
+    gap: 12,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F5F5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 20,
+    flex: 1,
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#1A1A1A',
+    letterSpacing: -0.5,
   },
   selectAllContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    alignSelf: 'flex-start',
   },
   checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     borderWidth: 2,
-    borderColor: '#ee4d2d',
+    borderColor: '#ddd',
     marginRight: 12,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#fff',
   },
   checkboxSelected: {
     backgroundColor: '#ee4d2d',
+    borderColor: '#ee4d2d',
   },
   selectAllText: {
     fontSize: 15,
     color: '#333',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   listContainer: {
     padding: 16,
+    paddingBottom: 8,
   },
   cartItem: {
     flexDirection: 'row',
     backgroundColor: '#fff',
     borderRadius: 16,
-    padding: 12,
+    padding: 14,
     marginBottom: 12,
-    alignItems: 'center',
+    alignItems: 'flex-start',
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
   cartItemSelected: {
     borderWidth: 2,
     borderColor: '#ee4d2d',
+    backgroundColor: '#FFF5F3',
   },
   itemImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 12,
-    backgroundColor: '#eee',
+    width: 100,
+    height: 100,
+    borderRadius: 14,
+    backgroundColor: '#f5f5f5',
+    marginLeft: 12,
   },
   itemInfo: {
     flex: 1,
     marginLeft: 12,
+    justifyContent: 'space-between',
+  },
+  itemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 6,
   },
   itemName: {
+    flex: 1,
     fontSize: 16,
     fontWeight: '600',
     color: '#1A1A1A',
-    marginBottom: 4,
+    lineHeight: 22,
+    marginRight: 8,
   },
   restaurantRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
-    gap: 4,
+    marginBottom: 10,
+    gap: 6,
   },
   restaurantName: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#999',
+    flex: 1,
   },
-  itemPrice: {
-    fontSize: 14,
-    color: '#ee4d2d',
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  quantityRow: {
+  itemBottom: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: 8,
+  },
+  priceContainer: {
+    flex: 1,
+  },
+  itemPriceUnit: {
+    fontSize: 13,
+    color: '#999',
+    textDecorationLine: 'line-through',
+    marginBottom: 2,
   },
   quantityControls: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F5F7FA',
-    borderRadius: 20,
-    padding: 4,
+    borderRadius: 24,
+    padding: 2,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
   },
   quantityButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
   quantityText: {
     fontSize: 15,
     color: '#333',
     fontWeight: '600',
     marginHorizontal: 12,
-    minWidth: 24,
+    minWidth: 28,
     textAlign: 'center',
   },
   itemTotal: {
-    fontSize: 16,
+    fontSize: 18,
     color: '#ee4d2d',
     fontWeight: 'bold',
   },
   removeButton: {
-    padding: 8,
-    marginLeft: 8,
+    padding: 4,
   },
   footer: {
     backgroundColor: '#fff',
-    padding: 16,
+    paddingTop: 20,
+    paddingBottom: 24,
+    paddingHorizontal: 20,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: '#F0F0F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 8,
   },
   freeDeliveryBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#E8F5E9',
-    padding: 12,
-    borderRadius: 12,
+    padding: 14,
+    borderRadius: 14,
     marginBottom: 16,
-    gap: 8,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#C8E6C9',
   },
   freeDeliveryText: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 14,
     color: '#2E7D32',
     fontWeight: '500',
+    lineHeight: 20,
   },
   freeDeliverySuccess: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#E8F5E9',
-    padding: 12,
-    borderRadius: 12,
+    padding: 14,
+    borderRadius: 14,
     marginBottom: 16,
-    gap: 8,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#C8E6C9',
   },
   freeDeliverySuccessText: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 14,
     color: '#2E7D32',
     fontWeight: '600',
+    lineHeight: 20,
   },
   priceBreakdown: {
-    marginBottom: 16,
+    marginBottom: 20,
   },
   priceRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
+    paddingVertical: 4,
   },
   priceLabel: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#666',
+    fontWeight: '500',
   },
   priceValue: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#333',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   freeDeliveryPrice: {
     color: '#4CAF50',
@@ -670,53 +756,87 @@ const styles = StyleSheet.create({
   divider: {
     height: 1,
     backgroundColor: '#E0E0E0',
-    marginVertical: 12,
+    marginVertical: 16,
   },
   totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
   },
   totalLabel: {
-    fontSize: 18,
+    fontSize: 20,
     color: '#1A1A1A',
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: -0.3,
   },
   totalPrice: {
-    fontSize: 22,
+    fontSize: 24,
     color: '#ee4d2d',
     fontWeight: 'bold',
+    letterSpacing: -0.5,
   },
   checkoutButton: {
     backgroundColor: '#ee4d2d',
     height: 56,
     borderRadius: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
     elevation: 4,
-    shadowColor: '#000',
+    shadowColor: '#ee4d2d',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.3,
     shadowRadius: 8,
+    overflow: 'hidden',
+    marginTop: 4,
   },
   checkoutButtonDisabled: {
     backgroundColor: '#ccc',
     elevation: 0,
+    shadowOpacity: 0,
   },
   checkoutButtonContent: {
     flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+  },
+  checkoutButtonLeft: {
+    flex: 1,
+  },
+  checkoutButtonRight: {
+    marginLeft: 12,
   },
   checkoutButtonText: {
-    fontSize: 16,
+    fontSize: 18,
     color: '#fff',
     fontWeight: 'bold',
-    marginBottom: 2,
+    marginBottom: 4,
   },
   checkoutButtonSubtext: {
-    fontSize: 12,
+    fontSize: 13,
     color: 'rgba(255,255,255,0.9)',
+    fontWeight: '500',
+  },
+  deliveryFeeInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  deliveryFeeText: {
+    fontSize: 13,
+    color: '#999',
+    fontStyle: 'italic',
+  },
+  noteText: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 12,
+    fontStyle: 'italic',
+    lineHeight: 18,
+    paddingHorizontal: 4,
   },
 });
 

@@ -8,42 +8,24 @@ import {
   TextInput,
   Alert,
   Image,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
   ScrollView,
 } from 'react-native';
-import { Ionicons, Feather, AntDesign } from '@expo/vector-icons';
+import { Ionicons, Feather } from '@expo/vector-icons';
 import Animated, { FadeInUp, FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, CommonActions } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import { auth, db } from '../config/Firebase';
-import {
-  signInWithEmailAndPassword,
-  GoogleAuthProvider,
-  signInWithCredential,
-} from 'firebase/auth';
-import { getDoc, doc, setDoc } from 'firebase/firestore';
-import * as WebBrowser from 'expo-web-browser';
-import * as Google from 'expo-auth-session/providers/google';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { getDoc, doc } from 'firebase/firestore';
 import { RootStackParamList } from '../app';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 type LoginRouteProp = RouteProp<RootStackParamList, 'Login'>;
 type LoginMode = 'customer' | 'restaurant' | 'shipper' | 'admin';
-
-WebBrowser.maybeCompleteAuthSession();
-
-const GOOGLE_LOGIN_ENABLED = false;
-
-const GOOGLE_CLIENT_IDS = {
-  expoClientId: process.env.EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID ?? 'disabled-expo-client-id',
-  iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? 'disabled-ios-client-id',
-  androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ?? 'disabled-android-client-id',
-  webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? 'disabled-web-client-id',
-};
 
 type RoleTheme = {
   accent: string;
@@ -102,9 +84,6 @@ const LogIn = () => {
   const [password, setPassword] = useState('');
   const [secureText, setSecureText] = useState(true);
   const [mode, setMode] = useState<LoginMode>(initialMode);
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  const [googleRequest, , promptGoogleLogin] = Google.useAuthRequest(GOOGLE_CLIENT_IDS);
-  const isGoogleConfigured = GOOGLE_LOGIN_ENABLED && Object.values(GOOGLE_CLIENT_IDS).some((value) => !!value);
   const currentTheme = ROLE_THEMES[mode] ?? ROLE_THEMES.customer;
   const roleToggleOptions: Array<{ label: string; value: LoginMode; icon: keyof typeof Ionicons.glyphMap }> = [
     { label: 'Khách hàng', value: 'customer', icon: 'person-outline' },
@@ -226,93 +205,7 @@ const LogIn = () => {
     }
   };
 
-  const ensureUserProfile = async (userId: string, payload: { email?: string | null; name?: string | null; photoURL?: string | null; }) => {
-    const userRef = doc(db, 'users', userId);
-    const existingUser = await getDoc(userRef);
-
-    if (existingUser.exists()) {
-      return existingUser.data();
-    }
-
-    const usernameFromEmail = payload.email
-      ? payload.email.split('@')[0]
-      : `user_${userId.slice(0, 6)}`;
-
-    await setDoc(userRef, {
-      uid: userId,
-      email: payload.email?.toLowerCase() ?? '',
-      username: usernameFromEmail,
-      name: payload.name ?? usernameFromEmail,
-      avatar: payload.photoURL ?? null,
-      role: 'customer',
-      provider: 'google',
-      createdAt: new Date(),
-    });
-
-    return (await getDoc(userRef)).data();
-  };
-
-  const signInWithGoogleToken = async (idToken: string) => {
-    const credential = GoogleAuthProvider.credential(idToken);
-    const userCredential = await signInWithCredential(auth, credential);
-    const { user } = userCredential;
-    const userData =
-      (await ensureUserProfile(user.uid, {
-        email: user.email,
-        name: user.displayName,
-        photoURL: user.photoURL,
-      })) || {};
-
-    const userRole = (userData.role || 'customer').toLowerCase();
-    if (!validateModeWithRole(userRole)) {
-      return;
-    }
-
-    navigateByRole(userRole);
-  };
-
-  const handleGoogleLogin = async () => {
-    if (!GOOGLE_LOGIN_ENABLED) {
-      Alert.alert('Thông báo', 'Đăng nhập Google đang được tạm khóa.');
-      return;
-    }
-
-    if (!isGoogleConfigured) {
-      Alert.alert(
-        'Thiếu cấu hình',
-        'Vui lòng cấu hình Google Client ID trong biến môi trường EXPO_PUBLIC_GOOGLE_* trước khi sử dụng tính năng này.'
-      );
-      return;
-    }
-
-    if (!googleRequest) {
-      Alert.alert('Thông báo', 'Google chưa sẵn sàng, vui lòng thử lại sau.');
-      return;
-    }
-
-    try {
-      setIsGoogleLoading(true);
-      const result = await promptGoogleLogin();
-
-      if (result?.type !== 'success' || !result.authentication?.idToken) {
-        setIsGoogleLoading(false);
-        return;
-      }
-
-      await signInWithGoogleToken(result.authentication.idToken);
-    } catch (error: any) {
-      // Xử lý lỗi đăng nhập Google với thông báo thân thiện
-      if (error.code === 'auth/account-exists-with-different-credential') {
-        Alert.alert('Lỗi', 'Tài khoản này đã được đăng ký bằng phương thức khác.');
-      } else if (error.code === 'auth/invalid-credential') {
-        Alert.alert('Lỗi', 'Không thể xác thực tài khoản Google.');
-      } else {
-        Alert.alert('Lỗi', 'Không thể đăng nhập bằng Google. Vui lòng thử lại sau.');
-      }
-    } finally {
-      setIsGoogleLoading(false);
-    }
-  };
+  // Đã bỏ chức năng đăng nhập Google tạm thời để tránh lỗi cấu hình clientId
 
   return (
     <LinearGradient colors={currentTheme.backgroundGradient} style={styles.gradientBackground}>
@@ -431,32 +324,6 @@ const LogIn = () => {
                   <Ionicons name="arrow-forward" size={18} color="#fff" />
                 </LinearGradient>
               </TouchableOpacity>
-
-              <View style={styles.divider}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>Hoặc</Text>
-                <View style={styles.dividerLine} />
-              </View>
-
-              {GOOGLE_LOGIN_ENABLED && (
-                <TouchableOpacity
-                  style={[
-                    styles.googleButton,
-                    (!isGoogleConfigured || isGoogleLoading) && styles.googleButtonDisabled,
-                  ]}
-                  onPress={handleGoogleLogin}
-                  disabled={!isGoogleConfigured || isGoogleLoading}
-                >
-                  {isGoogleLoading ? (
-                    <ActivityIndicator color="#EA4335" style={styles.googleIcon} />
-                  ) : (
-                    <AntDesign name="google" size={20} color="#EA4335" style={styles.googleIcon} />
-                  )}
-                  <Text style={styles.googleText}>
-                    {isGoogleConfigured ? 'Đăng nhập bằng Google' : 'Chưa cấu hình Google'}
-                  </Text>
-                </TouchableOpacity>
-              )}
 
               <View style={styles.registerRow}>
                 <Text style={styles.registerText}>
@@ -637,44 +504,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 17,
     fontWeight: '700',
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#e5e7eb',
-  },
-  dividerText: {
-    fontSize: 13,
-    color: '#9ca3af',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  googleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 16,
-    paddingVertical: 14,
-    backgroundColor: '#fff',
-    gap: 8,
-  },
-  googleIcon: {
-    marginRight: 4,
-  },
-  googleText: {
-    fontSize: 15,
-    color: '#1f2937',
-    fontWeight: '600',
-  },
-  googleButtonDisabled: {
-    opacity: 0.5,
   },
   registerRow: {
     justifyContent: 'center',

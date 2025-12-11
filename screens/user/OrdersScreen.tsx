@@ -113,7 +113,9 @@ const OrdersScreen = () => {
       setOrders(ordersData);
       setLoading(false);
     } catch (error) {
-      console.error('Error loading orders:', error);
+      if (__DEV__) {
+        console.warn('Error loading orders (silent)');
+      }
       setLoading(false);
     }
   };
@@ -130,7 +132,9 @@ const OrdersScreen = () => {
 
       Alert.alert('Thành công', 'Đã hủy đơn hàng');
     } catch (error) {
-      console.error('Error cancelling order:', error);
+      if (__DEV__) {
+        console.warn('Error cancelling order (silent)');
+      }
     }
   };
 
@@ -233,7 +237,9 @@ const OrdersScreen = () => {
       setRatingType('overall');
       Alert.alert('Thành công', 'Cảm ơn bạn đã đánh giá');
     } catch (error) {
-      console.error('Error submitting review:', error);
+      if (__DEV__) {
+        console.warn('Error submitting review (silent)');
+      }
     } finally {
       setSubmittingReview(false);
     }
@@ -294,7 +300,9 @@ const OrdersScreen = () => {
       const restaurantRef = doc(db, 'restaurants', restaurantId);
       await updateAggregatedRating(restaurantRef, newRating);
     } catch (error) {
-      console.error('Error updating restaurant rating:', error);
+      if (__DEV__) {
+        console.warn('Error updating restaurant rating (silent)');
+      }
     }
   };
 
@@ -303,7 +311,9 @@ const OrdersScreen = () => {
       const shipperRef = doc(db, 'users', shipperId);
       await updateAggregatedRating(shipperRef, newRating);
     } catch (error) {
-      console.error('Error updating shipper rating:', error);
+      if (__DEV__) {
+        console.warn('Error updating shipper rating (silent)');
+      }
     }
   };
 
@@ -320,7 +330,9 @@ const OrdersScreen = () => {
 
       await Promise.all(updatePromises);
     } catch (error) {
-      console.error('Error updating food ratings:', error);
+      if (__DEV__) {
+        console.warn('Error updating food ratings (silent)');
+      }
     }
   };
 
@@ -727,7 +739,7 @@ const OrdersScreen = () => {
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Ngày đặt:</Text>
                     <Text style={styles.detailValue}>
-                      {selectedOrder.createdAt.toDate().toLocaleString('vi-VN')}
+                      {selectedOrder.createdAt && selectedOrder.createdAt.toDate ? selectedOrder.createdAt.toDate().toLocaleString('vi-VN') : 'N/A'}
                     </Text>
                   </View>
                   <View style={styles.detailRow}>
@@ -786,7 +798,7 @@ const OrdersScreen = () => {
 
                 <View style={styles.detailSection}>
                   <Text style={styles.detailSectionTitle}>Tổng thanh toán</Text>
-                  {selectedOrder.subtotal && (
+                  {selectedOrder.subtotal !== undefined && selectedOrder.subtotal !== null && (
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabel}>Tạm tính:</Text>
                       <Text style={styles.detailValue}>
@@ -794,7 +806,7 @@ const OrdersScreen = () => {
                       </Text>
                     </View>
                   )}
-                  {selectedOrder.deliveryFee && (
+                  {selectedOrder.deliveryFee !== undefined && selectedOrder.deliveryFee !== null && (
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabel}>Phí vận chuyển:</Text>
                       <Text style={styles.detailValue}>
@@ -802,7 +814,7 @@ const OrdersScreen = () => {
                       </Text>
                     </View>
                   )}
-                  {selectedOrder.voucherDiscount && selectedOrder.voucherDiscount > 0 && (
+                  {selectedOrder.voucherDiscount !== undefined && selectedOrder.voucherDiscount !== null && selectedOrder.voucherDiscount > 0 && (
                     <View style={styles.detailRow}>
                       <Text style={styles.detailLabel}>Giảm giá:</Text>
                       <Text style={[styles.detailValue, styles.discountValue]}>
@@ -813,7 +825,7 @@ const OrdersScreen = () => {
                   <View style={[styles.detailRow, styles.totalRow]}>
                     <Text style={styles.totalLabel}>Tổng cộng:</Text>
                     <Text style={styles.totalPrice}>
-                      {selectedOrder.totalAmount.toLocaleString('vi-VN')} đ
+                      {selectedOrder.totalAmount ? selectedOrder.totalAmount.toLocaleString('vi-VN') : '0'} đ
                     </Text>
                   </View>
                 </View>

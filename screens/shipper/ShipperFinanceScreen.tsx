@@ -3,7 +3,7 @@ import {
   View, Text, FlatList, StyleSheet, ActivityIndicator, RefreshControl, 
   ScrollView, TouchableOpacity, Modal, TextInput, Alert
 } from 'react-native';
-import { collection, query, where, getDocs, doc, getDoc, updateDoc, addDoc, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, updateDoc, addDoc } from 'firebase/firestore';
 import { auth, db } from '../../config/Firebase';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 
@@ -159,17 +159,24 @@ const ShipperFinanceScreen = () => {
       const withdrawRef = collection(db, 'withdrawRequests');
       const q = query(
         withdrawRef,
-        where('shipperId', '==', user.uid),
-        orderBy('createdAt', 'desc')
+        where('shipperId', '==', user.uid)
       );
       const snapshot = await getDocs(q);
       const data: any[] = [];
       snapshot.forEach((docSnap) => {
         data.push({ id: docSnap.id, ...docSnap.data() });
       });
+      // Sort client-side to avoid Firestore composite index requirement
+      data.sort((a, b) => {
+        const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
+        const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
+        return bTime - aTime;
+      });
       setWithdrawHistory(data);
     } catch (e) {
-      console.error('Error fetching withdraw history:', e);
+      if (__DEV__) {
+        console.warn('Error fetching withdraw history:', e);
+      }
       setWithdrawHistory([]);
     }
   };

@@ -4,6 +4,7 @@ import { Navigate } from "react-router-dom";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuth } from "../context/AuthContext";
+import AppLogo from "../assets/AppLogo.png";
 
 const Login = () => {
   const { firebaseUser, isAdmin } = useAuth();
@@ -50,10 +51,40 @@ const Login = () => {
         .login-container {
           width: 100vw;
           height: 100vh;
-          background: #4fa3ff;
+          background: #0d4fd5;
           display: flex;
           align-items: center;
           justify-content: center;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .login-container::before,
+        .login-container::after {
+          content: "";
+          position: absolute;
+          width: 320px;
+          height: 320px;
+          border-radius: 40%;
+          background: rgba(255, 255, 255, 0.08);
+          filter: blur(40px);
+          animation: glowPulse 6s ease-in-out infinite;
+        }
+
+        .login-container::before {
+          top: -80px;
+          left: -60px;
+        }
+
+        .login-container::after {
+          bottom: -100px;
+          right: -40px;
+          animation-delay: 3s;
+        }
+
+        @keyframes glowPulse {
+          0%, 100% { opacity: 0.35; transform: scale(0.95) rotate(0deg); }
+          50% { opacity: 0.8; transform: scale(1.05) rotate(4deg); }
         }
 
         .login-box {
@@ -61,38 +92,18 @@ const Login = () => {
           max-width: 95%;
           height: 520px;
           display: flex;
-          background: white;
-          box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+          background: #fff;
+          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
         }
 
         /* LEFT */
         .login-left {
           width: 50%;
-          background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)),
-            url("https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80") center/cover no-repeat;
-          color: white;
-          padding: 40px;
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-        }
-
-        .circle {
-          width: 30px;
-          height: 30px;
-          background: white;
-          border-radius: 50%;
-          margin-bottom: 20px;
-        }
-
-        .login-left h2 {
-          font-size: 30px;
-          margin-bottom: 10px;
-        }
-
-        .login-left p {
-          font-size: 14px;
-          opacity: 0.9;
+          background:
+            linear-gradient(rgba(5, 17, 63, 0.35), rgba(3, 48, 120, 0.35)),
+            url("https://images.unsplash.com/photo-1556740749-887f6717d7e4?auto=format&fit=crop&w=2000&q=80")
+              center/cover no-repeat;
+          filter: contrast(1.05) brightness(1.05);
         }
 
         /* RIGHT */
@@ -107,29 +118,33 @@ const Login = () => {
         }
 
         .logo {
-          width: 60px;
-          height: 60px;
-          border-radius: 16px;
-          background: linear-gradient(135deg, #3b82f6, #2563eb);
+          width: 70px;
+          height: 70px;
+          border-radius: 18px;
+          margin: 0 auto 12px;
           display: flex;
           align-items: center;
           justify-content: center;
-          color: white;
-          font-size: 22px;
-          font-weight: bold;
-          margin: 0 auto 10px;
+          overflow: hidden;
+          background: #0f172a;
+        }
+
+        .logo img {
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
         }
 
         .logo-area h2 {
           margin: 0;
           font-size: 20px;
-          color: #222;
+          color: #0a1f44;
         }
 
         .logo-area p {
           margin: 0;
           font-size: 12px;
-          color: #777;
+          color: #5a6c8c;
         }
 
         .form-group {
@@ -150,37 +165,67 @@ const Login = () => {
         }
 
         .form-group input:focus {
-          border-bottom: 1px solid #3b82f6;
+          border-bottom: 2px solid #2563eb;
         }
 
         .password-wrapper {
           position: relative;
         }
 
-        .toggle-pass {
+        .password-wrapper input {
+          padding-right: 44px;
+        }
+
+        .eye-toggle {
           position: absolute;
           right: 0;
           top: 50%;
           transform: translateY(-50%);
-          font-size: 12px;
+          background: none;
+          border: none;
           cursor: pointer;
-          color: #3b82f6;
-          user-select: none;
+          padding: 4px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #1d4ed8;
+        }
+
+        .eye-toggle svg {
+          width: 20px;
+          height: 20px;
+          transition: color 0.2s ease;
+        }
+
+        .eye-toggle:hover svg {
+          color: #0f2a61;
         }
 
         .login-btn {
           margin-top: 10px;
           width: 100%;
-          padding: 12px;
+          padding: 14px;
           border: none;
-          background: #3b82f6;
+          background: linear-gradient(135deg, #1d4ed8, #2563eb 60%, #60a5fa);
           color: white;
-          font-size: 14px;
+          font-size: 15px;
+          font-weight: 600;
           cursor: pointer;
+          border-radius: 10px;
+          transition: all 0.3s ease;
+          box-shadow: 0 10px 20px rgba(37, 99, 235, 0.35);
         }
 
         .login-btn:hover {
-          background: #2563eb;
+          transform: translateY(-2px);
+          box-shadow: 0 16px 26px rgba(37, 99, 235, 0.45);
+        }
+
+        .login-btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+          transform: none;
+          box-shadow: none;
         }
 
         .error {
@@ -211,17 +256,15 @@ const Login = () => {
       <div className="login-container">
         <div className="login-box">
           {/* LEFT */}
-          <div className="login-left">
-            <div className="circle"></div>
-            <h2>Food Delivery</h2>
-            <p>Fast - Fresh - Simple</p>
-          </div>
+          <div className="login-left" />
 
           {/* RIGHT */}
           <div className="login-right">
             {/* LOGO + NAME */}
             <div className="logo-area">
-              <div className="logo">FO</div>
+              <div className="logo">
+                <img src={AppLogo} alt="Food Order Logo" />
+              </div>
               <h2>Food Order Admin</h2>
               <p>Hệ thống quản trị</p>
             </div>
@@ -248,12 +291,25 @@ const Login = () => {
                   required
                 />
 
-                <div
-                  className="toggle-pass"
+                <button
+                  type="button"
+                  className="eye-toggle"
+                  aria-label={showPass ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
                   onClick={() => setShowPass(!showPass)}
                 >
-                  {showPass ? "Ẩn" : "Hiện"}
-                </div>
+                  {showPass ? (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z" />
+                      <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+                      <line x1="3" y1="3" x2="21" y2="21" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  )}
+                </button>
               </div>
 
               {error && <div className="error">{error}</div>}

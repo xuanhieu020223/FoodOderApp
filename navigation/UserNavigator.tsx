@@ -157,12 +157,12 @@ const UserNavigator = () => {
       <Stack.Screen
         name="Cart"
         component={CartScreen}
-        options={{ title: 'Giỏ hàng' }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="Checkout"
         component={CheckoutScreen}
-        options={{ title: 'Thanh toán' }}
+        options={{ headerShown: false }}
       />
       <Stack.Screen
         name="AccountInfo"

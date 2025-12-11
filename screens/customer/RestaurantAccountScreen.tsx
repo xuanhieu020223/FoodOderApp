@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   ScrollView,
   Modal,
+  Image,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, CommonActions } from '@react-navigation/native';
@@ -20,6 +21,8 @@ import { auth, db } from '../../config/Firebase';
 import RestaurantScreenWrapper from '../../components/RestaurantScreenWrapper';
 import ChangePasswordModal from '../../components/ChangePasswordModal';
 import type { AdminStackParamList, RestaurantTabParamList } from '../../navigation/AdminNavigator';
+import * as ImagePicker from 'expo-image-picker';
+import { uploadImageToCloudinary } from '../../utils/cloudinary';
 
 type NavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<RestaurantTabParamList>,
@@ -50,6 +53,8 @@ const RestaurantAccountScreen = () => {
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [restaurantLogo, setRestaurantLogo] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
   const [statusModalVisible, setStatusModalVisible] = useState(false);
   const [showOwnerInfo, setShowOwnerInfo] = useState(false);
@@ -123,6 +128,11 @@ const RestaurantAccountScreen = () => {
           openingHours: data.openingHours || '',
           description: data.description || '',
         });
+        if (data.logoUrl || data.logo) {
+          setRestaurantLogo((data.logoUrl || data.logo) as string);
+        } else {
+          setRestaurantLogo(null);
+        }
         setRestaurantStatus({
           isActive: data.isActive !== false,
           isOpen: data.isOpen !== false,
@@ -199,6 +209,7 @@ const RestaurantAccountScreen = () => {
           address: restaurantInfo.address,
           openingHours: restaurantInfo.openingHours,
           description: restaurantInfo.description,
+          ...(restaurantLogo ? { logoUrl: restaurantLogo } : {}),
           ...restaurantStatus,
           updatedAt: new Date(),
         }),
@@ -215,6 +226,41 @@ const RestaurantAccountScreen = () => {
       Alert.alert('Lỗi', 'Không thể lưu thông tin. Vui lòng thử lại.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handlePickLogo = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      const user = auth.currentUser;
+      if (!user) return;
+
+      setUploadingLogo(true);
+
+      const imageUrl = await uploadImageToCloudinary(result.assets[0].uri);
+
+      await updateDoc(doc(db, 'restaurants', user.uid), {
+        logoUrl: imageUrl,
+        updatedAt: new Date(),
+      });
+
+      setRestaurantLogo(imageUrl);
+      Alert.alert('Thành công', 'Đã cập nhật logo nhà hàng');
+    } catch (error) {
+      console.error('Error updating restaurant logo:', error);
+      Alert.alert('Lỗi', 'Không thể cập nhật logo nhà hàng');
+    } finally {
+      setUploadingLogo(false);
     }
   };
 
@@ -300,6 +346,38 @@ const RestaurantAccountScreen = () => {
             </TouchableOpacity>
             {showRestaurantInfo && (
               <>
+                <View style={styles.logoSection}>
+                  <Text style={styles.logoLabel}>Logo nhà hàng</Text>
+                  <View style={styles.logoRow}>
+                    <View style={styles.logoPreviewWrapper}>
+                      {restaurantLogo ? (
+                        <Image source={{ uri: restaurantLogo }} style={styles.logoImage} />
+                      ) : (
+                        <View style={styles.logoPlaceholder}>
+                          <MaterialIcons name="restaurant" size={28} color="#9ca3af" />
+                          <Text style={styles.logoPlaceholderText}>Chưa có logo</Text>
+                        </View>
+                      )}
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.logoButton, uploadingLogo && styles.logoButtonDisabled]}
+                      onPress={handlePickLogo}
+                      disabled={uploadingLogo}
+                    >
+                      {uploadingLogo ? (
+                        <ActivityIndicator color="#fff" size="small" />
+                      ) : (
+                        <>
+                          <MaterialIcons name="photo-camera" size={18} color="#fff" />
+                          <Text style={styles.logoButtonText}>
+                            {restaurantLogo ? 'Đổi logo' : 'Thêm logo'}
+                          </Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
                 <TextInput
                   style={styles.input}
                   placeholder="Tên nhà hàng"
@@ -697,6 +775,64 @@ const styles = StyleSheet.create({
   },
   sectionHeaderExpanded: {
     marginBottom: 16,
+  },
+  logoSection: {
+    marginBottom: 16,
+  },
+  logoLabel: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginBottom: 8,
+    fontWeight: '500',
+  },
+  logoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  logoPreviewWrapper: {
+    width: 72,
+    height: 72,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    overflow: 'hidden',
+    backgroundColor: '#f9fafb',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoImage: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  logoPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  logoPlaceholderText: {
+    fontSize: 11,
+    color: '#9ca3af',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  logoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: '#ee4d2d',
+    gap: 6,
+  },
+  logoButtonDisabled: {
+    opacity: 0.6,
+  },
+  logoButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
   },
   secondaryButton: {
     flexDirection: 'row',

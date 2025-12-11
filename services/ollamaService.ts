@@ -69,6 +69,7 @@ const getDefaultCandidates = () => {
   }
 
   addCandidate('http://127.0.0.1:11434');
+  addCandidate('http://XuanHieu:11434');
   return candidates;
 };
 

@@ -253,10 +253,10 @@ PM7 --> PM8
 
 ---
 
-## 6. Tìm kiếm & duyệt nhà hàng/món
+## 6. Tìm kiếm món ăn & nhà hàng
 
 - **Tác nhân**: Khách hàng.
-- **Mô tả**: Duyệt danh sách nhà hàng, món ăn, sử dụng bộ lọc, xem chi tiết.
+- **Mô tả**: Tìm kiếm và duyệt danh sách nhà hàng/món ăn, dùng bộ lọc & sắp xếp để xem chi tiết.
 - **Tiền điều kiện**: Đăng nhập (hoặc khách vãng lai nếu được phép).
 - **Luồng sự kiện**:
   1. Người dùng vào trang `Trang chủ` hoặc `Nhà hàng`.
@@ -271,7 +271,7 @@ left to right direction
 
 actor "Khách hàng" as Customer
 
-rectangle "Tìm kiếm & duyệt" {
+rectangle "Tìm kiếm món ăn & nhà hàng" {
   usecase "Xem đề xuất" as BR1
   usecase "Nhập từ khoá tìm kiếm" as BR2
   usecase "Chọn bộ lọc" as BR3

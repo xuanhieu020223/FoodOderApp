@@ -125,7 +125,11 @@ const ShipperMapScreen = () => {
         return `${distanceKm} km`;
       }
     } catch (e) {
-      console.error('Error calculating distance:', e);
+      // Không log lỗi ra console để tránh hiển thị cho người dùng
+      // Chỉ log trong development mode nếu cần debug
+      if (__DEV__) {
+        console.warn('Distance calculation error (silent)');
+      }
     }
     return '~5.2 km';
   };

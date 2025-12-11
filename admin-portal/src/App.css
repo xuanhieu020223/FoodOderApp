@@ -731,7 +731,38 @@ select {
 
 .table--compact .table__head,
 .table--compact .table__row {
-  grid-template-columns: 1fr 1.5fr 1fr 0.8fr 1fr 1fr;
+  grid-template-columns:
+    minmax(140px, 0.9fr)
+    minmax(180px, 1.3fr)
+    minmax(160px, 1.2fr)
+    minmax(120px, 0.8fr)
+    minmax(130px, 1fr)
+    minmax(110px, 0.7fr);
+}
+
+.table__cell--id {
+  font-family: 'JetBrains Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.table__cell--restaurant,
+.table__cell--customer {
+  max-width: 260px;
+}
+
+.table__cell--amount {
+  font-weight: 600;
+  color: #111827;
+}
+
+.table__cell--status {
+  justify-content: flex-start;
+}
+
+.table__cell--sla {
+  font-weight: 600;
+  color: var(--success);
 }
 
 .tag {

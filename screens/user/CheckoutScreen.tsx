@@ -24,6 +24,7 @@ import { UserStackParamList } from '../../navigation/UserNavigator';
 import CustomerScreenWrapper from '../../components/CustomerScreenWrapper';
 import FloatingChatButton from '../../components/FloatingChatButton';
 import MomoQRDisplay from '../../components/MomoQRDisplay';
+import { calculateDeliveryFeeFromAddresses } from '../../utils/deliveryFee';
 
 type NavigationProp = NativeStackNavigationProp<UserStackParamList>;
 type CheckoutRouteProp = RouteProp<UserStackParamList, 'Checkout'>;
@@ -68,8 +69,6 @@ type Voucher = {
   isUsed?: boolean;
 };
 
-const DELIVERY_FEE = 15000; // 15,000 VND
-
 const CheckoutScreen = () => {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<CheckoutRouteProp>();
@@ -92,6 +91,12 @@ const CheckoutScreen = () => {
   const [selectedVoucher, setSelectedVoucher] = useState<Voucher | null>(null);
   const [momoQRVisible, setMomoQRVisible] = useState(false);
   const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
+  const [deliveryFee, setDeliveryFee] = useState<number>(15000); // Phí vận chuyển mặc định
+  const [calculatingFee, setCalculatingFee] = useState(false);
+  const [restaurantInfo, setRestaurantInfo] = useState<{
+    address: string;
+    location: { latitude: number; longitude: number } | null;
+  } | null>(null);
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -119,6 +124,38 @@ const CheckoutScreen = () => {
     }
   }, [cartItems]);
 
+  // Tính phí vận chuyển khi địa chỉ hoặc thông tin nhà hàng thay đổi
+  useEffect(() => {
+    const calculateFee = async () => {
+      if (!orderDetails.address || !restaurantInfo) {
+        return;
+      }
+
+      setCalculatingFee(true);
+      try {
+        const subtotal = calculateSubTotal();
+        const fee = await calculateDeliveryFeeFromAddresses(
+          restaurantInfo.address,
+          restaurantInfo.location,
+          orderDetails.address,
+          location,
+          subtotal
+        );
+        setDeliveryFee(fee);
+      } catch (error) {
+        // Không hiển thị lỗi cho người dùng, chỉ log trong development
+        if (__DEV__) {
+          console.warn('Error calculating delivery fee (silent):', error);
+        }
+        // Giữ phí mặc định nếu có lỗi (đã được set trong calculateDeliveryFee)
+      } finally {
+        setCalculatingFee(false);
+      }
+    };
+
+    calculateFee();
+  }, [orderDetails.address, location, restaurantInfo, cartItems]);
+
   const loadUserData = async () => {
     try {
       const user = auth.currentUser;
@@ -128,37 +165,87 @@ const CheckoutScreen = () => {
       }
 
       const userDoc = await getDoc(doc(db, 'users', user.uid));
+      let userData: any = {};
       if (userDoc.exists()) {
-        const userData = userDoc.data();
-        // Cập nhật thông tin từ Firebase
-        const updatedOrderDetails = {
-          ...orderDetails,
-          fullName: userData.name || orderDetails.fullName,
-          phone: userData.phone || orderDetails.phone,
-          address: userData.address || orderDetails.address,
-        };
+        userData = userDoc.data();
+      }
 
-        setOrderDetails(updatedOrderDetails);
-
-        // Nếu có thông tin vị trí, cập nhật location state
-        if (userData.location) {
-          setLocation({
-            latitude: userData.location.latitude,
-            longitude: userData.location.longitude,
-            address: userData.address || ''
-          });
+      // Tìm địa chỉ mặc định từ collection addresses
+      let defaultAddress = null;
+      let defaultLocation = null;
+      
+      try {
+        const addressesRef = collection(db, 'addresses');
+        const addressesQuery = query(
+          addressesRef, 
+          where('userId', '==', user.uid),
+          where('isDefault', '==', true)
+        );
+        const addressesSnapshot = await getDocs(addressesQuery);
+        
+        if (!addressesSnapshot.empty) {
+          const defaultAddr = addressesSnapshot.docs[0].data();
+          defaultAddress = defaultAddr.fullText || defaultAddr.address || '';
+          if (defaultAddr.lat && defaultAddr.lng) {
+            defaultLocation = {
+              latitude: defaultAddr.lat,
+              longitude: defaultAddr.lng,
+              address: defaultAddress
+            };
+          }
+          // Lấy thông tin name và phone từ địa chỉ mặc định
+          if (defaultAddr.name) {
+            userData.name = defaultAddr.name;
+          }
+          if (defaultAddr.phone) {
+            userData.phone = defaultAddr.phone;
+          }
         }
+      } catch (error) {
+        // Không log lỗi để tránh hiển thị cho người dùng
+        if (__DEV__) {
+          console.warn('Error loading default address (silent)');
+        }
+      }
 
-        // Log để debug
+      // Ưu tiên địa chỉ mặc định, nếu không có thì dùng địa chỉ trong user profile
+      const finalAddress = defaultAddress || userData.address || '';
+      const finalLocation = defaultLocation || (userData.location ? {
+        latitude: userData.location.latitude,
+        longitude: userData.location.longitude,
+        address: finalAddress
+      } : null);
+
+      // Cập nhật thông tin từ Firebase
+      const updatedOrderDetails = {
+        ...orderDetails,
+        fullName: userData.name || orderDetails.fullName,
+        phone: userData.phone || orderDetails.phone,
+        address: finalAddress || orderDetails.address,
+      };
+
+      setOrderDetails(updatedOrderDetails);
+
+      // Cập nhật location state nếu có
+      if (finalLocation) {
+        setLocation(finalLocation);
+      }
+
+      // Log để debug (chỉ trong development)
+      if (__DEV__) {
         console.log('Loaded user data:', {
           name: userData.name,
           phone: userData.phone,
-          address: userData.address,
-          location: userData.location
+          address: finalAddress,
+          location: finalLocation,
+          hasDefaultAddress: !!defaultAddress
         });
       }
     } catch (error) {
-      console.error('Error loading user data:', error);
+      // Không log lỗi để tránh hiển thị cho người dùng
+      if (__DEV__) {
+        console.warn('Error loading user data (silent)');
+      }
     }
   };
 
@@ -171,17 +258,45 @@ const CheckoutScreen = () => {
       }
 
       const items: CartItem[] = [];
+      const restaurantIds = new Set<string>();
+      
       for (const itemId of selectedItems) {
         const cartDoc = await getDoc(doc(db, 'carts', itemId));
         if (cartDoc.exists()) {
-          items.push({ id: cartDoc.id, ...cartDoc.data() } as CartItem);
+          const itemData = cartDoc.data() as CartItem;
+          items.push({ id: cartDoc.id, ...itemData });
+          if (itemData.restaurantId) {
+            restaurantIds.add(itemData.restaurantId);
+          }
         }
       }
       setCartItems(items);
+      
+      // Load thông tin nhà hàng (lấy nhà hàng đầu tiên nếu có nhiều)
+      if (restaurantIds.size > 0) {
+        const firstRestaurantId = Array.from(restaurantIds)[0];
+        await loadRestaurantInfo(firstRestaurantId);
+      }
+      
       setLoading(false);
     } catch (error) {
       console.error('Error loading selected items:', error);
       setLoading(false);
+    }
+  };
+
+  const loadRestaurantInfo = async (restaurantId: string) => {
+    try {
+      const restaurantDoc = await getDoc(doc(db, 'restaurants', restaurantId));
+      if (restaurantDoc.exists()) {
+        const restaurantData = restaurantDoc.data();
+        setRestaurantInfo({
+          address: restaurantData.address || '',
+          location: restaurantData.location || null,
+        });
+      }
+    } catch (error) {
+      console.error('Error loading restaurant info:', error);
     }
   };
 
@@ -378,12 +493,12 @@ const CheckoutScreen = () => {
           customerPhone: orderDetails.phone,
           address: orderDetails.address,
           subtotal: restaurantSubtotal,
-          deliveryFee: DELIVERY_FEE,
+          deliveryFee: deliveryFee,
           voucherDiscount: orderVoucherDiscount,
           voucherCode: applicableVoucher?.code || null,
           voucherId: applicableVoucher?.id || null,
           voucherType: applicableVoucher?.discountType || null,
-          totalAmount: Math.max(0, restaurantSubtotal + DELIVERY_FEE - orderVoucherDiscount),
+          totalAmount: Math.max(0, restaurantSubtotal + deliveryFee - orderVoucherDiscount),
           status: 'pending',
           note: orderDetails.note,
           paymentMethod: orderDetails.paymentMethod,
@@ -625,12 +740,12 @@ const CheckoutScreen = () => {
           customerPhone: orderDetails.phone,
           address: orderDetails.address,
           subtotal: restaurantSubtotal,
-          deliveryFee: DELIVERY_FEE,
+          deliveryFee: deliveryFee,
           voucherDiscount: orderVoucherDiscount,
           voucherCode: applicableVoucher?.code || null,
           voucherId: applicableVoucher?.id || null,
           voucherType: applicableVoucher?.discountType || null,
-          totalAmount: Math.max(0, restaurantSubtotal + DELIVERY_FEE - orderVoucherDiscount),
+          totalAmount: Math.max(0, restaurantSubtotal + deliveryFee - orderVoucherDiscount),
           status: 'processing', // Đã thanh toán nên chuyển sang processing
           note: orderDetails.note,
           paymentMethod: 'MoMo',
@@ -705,7 +820,7 @@ const CheckoutScreen = () => {
 
   if (loading) {
     return (
-      <CustomerScreenWrapper gradientHeight={300}>
+      <CustomerScreenWrapper gradientHeight={140}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#ee4d2d" />
           <Text style={styles.loadingText}>Đang tải thông tin...</Text>
@@ -722,13 +837,26 @@ const CheckoutScreen = () => {
     selectedVoucher && isCurrentVoucherEligible
       ? calculateVoucherDiscount(selectedVoucher, subtotal)
       : 0;
-  const totalWithVoucher = Math.max(0, subtotal + DELIVERY_FEE - voucherDiscountAmount);
+  const totalWithVoucher = Math.max(0, subtotal + deliveryFee - voucherDiscountAmount);
   const availableVouchers = vouchers.filter(voucher => isVoucherEligible(voucher, subtotal));
 
   return (
-    <CustomerScreenWrapper gradientHeight={320}>
+    <CustomerScreenWrapper gradientHeight={140}>
       <>
       <View style={styles.container}>
+        {/* Header with back button */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Thanh toán</Text>
+          <View style={styles.headerRight} />
+        </View>
+        
         <ScrollView style={styles.scrollView}>
         {/* Delivery Address Section */}
         <View style={styles.section}>
@@ -971,17 +1099,21 @@ const CheckoutScreen = () => {
             </View>
             <View style={styles.priceRow}>
               <Text style={styles.priceLabel}>Phí giao hàng</Text>
-              <Text style={styles.priceValue}>
-                {DELIVERY_FEE.toLocaleString('vi-VN', {
-                  style: 'currency',
-                  currency: 'VND'
-                })}
-              </Text>
+              {calculatingFee ? (
+                <ActivityIndicator size="small" color="#ee4d2d" />
+              ) : (
+                <Text style={styles.priceValue}>
+                  {deliveryFee.toLocaleString('vi-VN', {
+                    style: 'currency',
+                    currency: 'VND'
+                  })}
+                </Text>
+              )}
             </View>
             {voucherDiscountAmount > 0 && (
               <View style={styles.priceRow}>
                 <Text style={styles.priceLabel}>
-                  Voucher {selectedVoucher?.code ? `(${selectedVoucher.code})` : ''}
+                  Voucher{selectedVoucher?.code ? ` (${selectedVoucher.code})` : ''}
                 </Text>
                 <Text style={[styles.priceValue, styles.discountValue]}>
                   -{voucherDiscountAmount.toLocaleString('vi-VN', {
@@ -1050,7 +1182,43 @@ const CheckoutScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F5F7FA',
+  },
+  header: {
+    backgroundColor: '#fff',
+    paddingTop: 12,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F5F5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#1A1A1A',
+    textAlign: 'center',
+    marginHorizontal: 12,
+    letterSpacing: -0.5,
+  },
+  headerRight: {
+    width: 40,
   },
   scrollView: {
     flex: 1,
@@ -1068,8 +1236,10 @@ const styles = StyleSheet.create({
   },
   section: {
     backgroundColor: '#fff',
+    marginTop: 8,
     marginBottom: 8,
-    padding: 16,
+    padding: 20,
+    borderRadius: 0,
   },
   sectionHeader: {
     flexDirection: 'row',

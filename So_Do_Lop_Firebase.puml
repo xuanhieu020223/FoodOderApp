@@ -1,0 +1,204 @@
+@startuml
+title Firebase Data Model - Food Order App
+skinparam classAttributeIconSize 0
+skinparam dpi 120
+left to right direction
+
+class User {
+  +id: string
+  +email: string
+  +name: string
+  +phone: string
+  +role: enum<customer|restaurant|shipper|admin>
+  +avatarUrl: string
+  +wallet: Wallet
+  +addresses: Address[]
+  +createdAt: Timestamp
+}
+
+class Restaurant {
+  +id: string  <<Firestore doc>>
+  +ownerId: string  // User.id
+  +name: string
+  +address: string
+  +logoUrl: string
+  +openingHours: string
+  +isActive: boolean
+  +rating: number
+}
+
+class Category {
+  +id: string
+  +name: string
+  +description: string
+  +priority: number
+}
+
+class Food {
+  +id: string
+  +restaurantId: string
+  +category: string  // Category.id
+  +name: string
+  +description: string
+  +price: number
+  +imageUrl: string
+  +isAvailable: boolean
+  +rating: number
+  +sold: number
+}
+
+class Cart {
+  +id: string
+  +userId: string
+  +items: CartItem[]
+  +createdAt: Timestamp
+}
+
+class CartItem {
+  +foodId: string
+  +quantity: number
+  +price: number
+}
+
+class Favorite {
+  +id: string
+  +userId: string
+  +foodId: string
+  +createdAt: Timestamp
+}
+
+class Order {
+  +id: string
+  +userId: string        // customer
+  +restaurantId: string
+  +shipperId: string
+  +items: OrderItem[]
+  +status: enum<pending|confirmed|preparing|shipping|delivered|cancelled|failed>
+  +total: number
+  +paymentMethod: string
+  +voucherId: string
+  +createdAt: Timestamp
+  +updatedAt: Timestamp
+}
+
+class OrderItem {
+  +foodId: string
+  +name: string
+  +price: number
+  +quantity: number
+}
+
+class Notification {
+  +id: string
+  +targetUserId: string  // customer/shipper/restaurant
+  +orderId: string
+  +title: string
+  +body: string
+  +type: string
+  +isRead: boolean
+  +createdAt: Timestamp
+}
+
+class Promotion {
+  +id: string
+  +restaurantId: string
+  +title: string
+  +description: string
+  +code: string
+  +discount: number
+  +minOrder: number
+  +maxDiscount: number
+  +start: Timestamp
+  +expiryDate: Timestamp
+  +isActive: boolean
+}
+
+class Voucher {
+  +id: string
+  +code: string
+  +discount: number
+  +minOrder: number
+  +maxDiscount: number
+  +expiryDate: Timestamp
+  +isActive: boolean
+  +restaurantId: string
+}
+
+class Rating {
+  +id: string
+  +orderId: string
+  +userId: string
+  +restaurantId: string
+  +shipperId: string
+  +foodId: string
+  +score: number
+  +comment: string
+  +createdAt: Timestamp
+}
+
+class SupportTicket {
+  +id: string
+  +creatorId: string
+  +assignedTo: string
+  +subject: string
+  +content: string
+  +priority: enum<low|medium|high>
+  +status: enum<open|pending|resolved>
+  +createdAt: Timestamp
+  +updatedAt: Timestamp
+}
+
+class WithdrawRequest {
+  +id: string
+  +userId: string   // shipper
+  +amount: number
+  +status: enum<pending|approved|rejected>
+  +createdAt: Timestamp
+  +processedAt: Timestamp
+}
+
+class Wallet {
+  +balance: number
+  +debt: number
+  +pendingWithdraw: number
+}
+
+class Address {
+  +label: string
+  +fullText: string
+  +lat: number
+  +lng: number
+  +isDefault: boolean
+}
+
+' Relationships
+User "1" -- "many" Address : owns >
+User "1" -- "1" Wallet : has >
+User "1" -- "many" Cart : creates >
+User "1" -- "many" Favorite : saves >
+User "1" -- "many" Order : places >
+User "1" -- "many" SupportTicket : opens >
+User "1" -- "many" WithdrawRequest : requests >
+
+Restaurant "1" -- "many" Food : offers >
+Restaurant "1" -- "many" Category : groups >
+Restaurant "1" -- "many" Order : receives >
+Restaurant "1" -- "many" Promotion : owns >
+
+Food "1" -- "many" OrderItem : referenced >
+Order "1" -- "many" OrderItem : contains >
+Order "1" -- "many" Notification : triggers >
+Order "1" -- "many" Rating : receives >
+
+Promotion "1" -- "many" Voucher : issues >
+User "many" -- "many" Voucher : redeems >
+
+SupportTicket "many" -- "1" User : assignedTo >
+WithdrawRequest "many" -- "1" User : shipper >
+
+Notification "many" -- "1" User : target >
+Favorite "many" -- "1" Food : links >
+CartItem "many" -- "1" Food : references >
+
+@enduml
+

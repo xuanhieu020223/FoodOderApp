@@ -203,25 +203,6 @@ const HomeScreen = () => {
     }
   };
 
-  useEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <TouchableOpacity
-          style={styles.headerCartButton}
-          onPress={() => navigation.navigate('Cart')}
-        >
-          <Ionicons name="cart-outline" size={24} color="#333" />
-          {cartItemCount > 0 && (
-            <View style={styles.cartBadge}>
-              <Text style={styles.cartBadgeText}>
-                {cartItemCount > 99 ? '99+' : cartItemCount}
-              </Text>
-            </View>
-          )}
-        </TouchableOpacity>
-      ),
-    });
-  }, [navigation, cartItemCount]);
 
   useEffect(() => {
     const query = searchQuery.toLowerCase().trim();
@@ -478,7 +459,13 @@ const HomeScreen = () => {
     >
       <View style={styles.restaurantImageContainer}>
         <Image
-          source={{ uri: item.image || 'https://cdn-icons-png.flaticon.com/512/3595/3595455.png' }}
+          source={{
+            uri:
+              (item as any).logoUrl ||
+              (item as any).logo ||
+              item.image ||
+              'https://cdn-icons-png.flaticon.com/512/3595/3595455.png',
+          }}
           style={styles.restaurantCardImage}
           resizeMode="cover"
         />
@@ -722,6 +709,19 @@ const HomeScreen = () => {
               </TouchableOpacity>
             )}
           </View>
+          <TouchableOpacity
+            style={styles.cartButton}
+            onPress={() => navigation.navigate('Cart')}
+          >
+            <Ionicons name="cart-outline" size={24} color="#333" />
+            {cartItemCount > 0 && (
+              <View style={styles.cartBadge}>
+                <Text style={styles.cartBadgeText}>
+                  {cartItemCount > 99 ? '99+' : cartItemCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
 
         {!searchQuery ? (
@@ -944,7 +944,11 @@ const HomeScreen = () => {
                   >
                     <Image
                       source={{
-                        uri: restaurantItem.image || 'https://cdn-icons-png.flaticon.com/512/3595/3595455.png',
+                        uri:
+                          (restaurantItem as any).logoUrl ||
+                          (restaurantItem as any).logo ||
+                          restaurantItem.image ||
+                          'https://cdn-icons-png.flaticon.com/512/3595/3595455.png',
                       }}
                       style={styles.searchRowImage}
                     />
@@ -1009,6 +1013,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -1017,6 +1024,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 16,
     height: 48,
+    flex: 1,
   },
   searchIcon: {
     marginRight: 12,
@@ -1031,14 +1039,13 @@ const styles = StyleSheet.create({
     padding: 4,
     marginLeft: 8,
   },
-  headerCartButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  cartButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
     backgroundColor: '#F5F7FA',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
     position: 'relative',
   },
   cartBadge: {

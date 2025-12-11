@@ -76,7 +76,7 @@ const CatalogOrders = () => {
       </div>
 
       <div className="grid grid--2">
-        <div className="panel">
+        <div className="panel panel--table">
           <div className="panel__header">
             <div>
               <h3>Danh mục toàn hệ thống</h3>
@@ -137,28 +137,40 @@ const CatalogOrders = () => {
           ) : errorMessage ? (
             <div className="panel__empty error">{errorMessage}</div>
           ) : (
-            <div className="table table--compact">
-              <div className="table__head">
-                <span>Mã ĐH</span>
-                <span>Nhà hàng</span>
-                <span>Khách hàng</span>
-                <span>Tổng</span>
-                <span>Trạng thái</span>
-                <span>SLA</span>
-              </div>
-              {orders.map((order) => (
-                <div key={order.id} className="table__row">
-                  <span className="table__title">{order.id}</span>
-                  <span>{order.restaurantName || 'Nhà hàng'}</span>
-                  <span>{order.customerName || 'Khách hàng'}</span>
-                  <span>{(order.totalAmount ?? 0).toLocaleString('vi-VN')}đ</span>
-                  <span>
-                    <StatusBadge status={order.status ?? 'pending'} />
-                  </span>
-                  <span>On track</span>
+            <div className="table-wrapper">
+              <div className="table table--compact">
+                <div className="table__head">
+                  <div className="table__cell table__cell--id">Mã ĐH</div>
+                  <div className="table__cell table__cell--restaurant">Nhà hàng</div>
+                  <div className="table__cell table__cell--customer">Khách hàng</div>
+                  <div className="table__cell table__cell--amount">Tổng</div>
+                  <div className="table__cell table__cell--status">Trạng thái</div>
+                  <div className="table__cell table__cell--sla">SLA</div>
                 </div>
-              ))}
-              {!orders.length && <div className="panel__empty">Không có đơn hàng nào.</div>}
+                {orders.map((order) => (
+                  <div key={order.id} className="table__row">
+                    <div className="table__cell table__cell--id" title={order.id}>
+                      <span className="table__title">{order.id}</span>
+                    </div>
+                    <div className="table__cell table__cell--restaurant" title={order.restaurantName || 'Nhà hàng'}>
+                      <span className="table__title">{order.restaurantName || 'Nhà hàng'}</span>
+                    </div>
+                    <div className="table__cell table__cell--customer" title={order.customerName || 'Khách hàng'}>
+                      <span className="table__title">{order.customerName || 'Khách hàng'}</span>
+                    </div>
+                    <div className="table__cell table__cell--amount">
+                      <span className="table__title">{(order.totalAmount ?? 0).toLocaleString('vi-VN')}đ</span>
+                    </div>
+                    <div className="table__cell table__cell--status">
+                      <StatusBadge status={order.status ?? 'pending'} />
+                    </div>
+                    <div className="table__cell table__cell--sla">
+                      <span>On track</span>
+                    </div>
+                  </div>
+                ))}
+                {!orders.length && <div className="panel__empty">Không có đơn hàng nào.</div>}
+              </div>
             </div>
           )}
         </div>

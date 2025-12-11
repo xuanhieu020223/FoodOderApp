@@ -18,6 +18,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Reanimated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { sendMessageToOllama, ChatMessage, checkOllamaConnection } from '../services/ollamaService';
 import BotAvatar from './BotAvatar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from '../config/Firebase';
 
 const { width, height } = Dimensions.get('window');
 
@@ -28,13 +31,19 @@ interface AIChatboxProps {
 
 const AnimatedTouchable = Reanimated.createAnimatedComponent(TouchableOpacity);
 
+const STORAGE_KEY = 'ai_chat_history';
+
+const DEFAULT_MESSAGES: ChatMessage[] = [
+  {
+    role: 'assistant',
+    content:
+      'Xin chào! Tôi là trợ lý AI của ứng dụng đặt đồ ăn. Tôi có thể giúp bạn tìm món ăn, nhà hàng, hoặc giải đáp thắc mắc. Bạn cần tôi giúp gì?',
+  },
+];
+
 const AIChatbox: React.FC<AIChatboxProps> = ({ visible, onClose }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      role: 'assistant',
-      content: 'Xin chào! Tôi là trợ lý AI của ứng dụng đặt đồ ăn. Tôi có thể giúp bạn tìm món ăn, nhà hàng, hoặc giải đáp thắc mắc. Bạn cần tôi giúp gì?',
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>(DEFAULT_MESSAGES);
+  const [storageKey, setStorageKey] = useState(`${STORAGE_KEY}_guest`);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +85,51 @@ const AIChatbox: React.FC<AIChatboxProps> = ({ visible, onClose }) => {
       setIsCheckingConnection(false);
     }
   }, []);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      const userId = user?.uid || 'guest';
+      setStorageKey(`${STORAGE_KEY}_${userId}`);
+      setMessages(DEFAULT_MESSAGES); // reset khi đổi user để tránh lộ lịch sử
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    const loadHistory = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(storageKey);
+        if (stored) {
+          const parsed: ChatMessage[] = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setMessages(parsed);
+          }
+        }
+      } catch (historyError) {
+        if (__DEV__) {
+          console.warn('Không thể tải lịch sử chat AI:', historyError);
+        }
+      }
+    };
+
+    loadHistory();
+  }, [storageKey]);
+
+  useEffect(() => {
+    const persistHistory = async () => {
+      try {
+        await AsyncStorage.setItem(storageKey, JSON.stringify(messages));
+      } catch (saveError) {
+        if (__DEV__) {
+          console.warn('Không thể lưu lịch sử chat AI:', saveError);
+        }
+      }
+    };
+
+    if (messages.length > 0) {
+      persistHistory();
+    }
+  }, [messages, storageKey]);
 
   useEffect(() => {
     if (visible) {
